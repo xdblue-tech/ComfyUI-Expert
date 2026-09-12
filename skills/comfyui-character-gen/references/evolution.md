@@ -156,9 +156,9 @@ This skill is designed to evolve continuously. Monitor these sources and update 
 Track what works best for this user's specific setup and preferences.
 
 ### Hardware Profile
-- GPU: RTX 5090 (32GB VRAM)
-- Can run: All models natively, including Wan 14B, FLUX FP16
-- Optimization: Use --highvram, batch processing enabled
+- GPU: RTX 5070 Ti (16.7 GB VRAM)
+- Can run: SDXL/Pony/Illustrious fully; Flux dev fp8/GGUF with offload
+- Optimization: Default launch flags, sequential jobs (see `foundation/hardware-profile.md`)
 
 ### Project: Sage Character
 - Source: 3D renders (visual novel style)

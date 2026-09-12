@@ -507,16 +507,14 @@ When asked to create a video production workflow:
 
 ### RTX 50 Series (2026)
 ```bash
-# ComfyUI launch flags for optimal performance
---highvram \
---fp8_e4m3fn-unet \
---reserve-vram 7 \
---use-pytorch-cross-attention
+# Default launch flags for this machine (see foundation/hardware-profile.md)
+python main.py --listen
+# Optional for Flux workflows: --fp8_e4m3fn-unet
 
-# Expected performance:
-- Wan 2.2 14B: ~2-3 min per 5s clip (832x1216)
-- LTX-2 4K: ~4-5 min per 5s clip (1920x1080)
+# Expected performance at 16.7 GB VRAM; queue clips sequentially:
 - Wan 2.1 1.3B: ~1-2 min per 5s clip (768x1024)
+- 14B-class models (Wan 2.2, LTX-2): GGUF quantization + offload only,
+  expect much slower than the timings above
 ```
 
 ### AMD GPUs (ROCm)

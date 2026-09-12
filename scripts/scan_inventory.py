@@ -14,7 +14,6 @@ import argparse
 import json
 import os
 import sys
-import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -79,7 +78,7 @@ def detect_comfyui_path(candidates=None):
 
 def http_json(url, timeout=10):
     """GET a URL and return parsed JSON. Raises OSError/ValueError on failure."""
-    with urllib.request.urlopen(url, timeout=timeout) as resp:
+    with urllib.request.urlopen(url, timeout=timeout) as resp:  # noqa: S310, RUF100
         return json.loads(resp.read().decode("utf-8"))
 
 

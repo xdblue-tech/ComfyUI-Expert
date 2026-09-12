@@ -153,22 +153,20 @@ Track what works for specific user setups and projects.
 ### Hardware Profile
 
 **User:** MCKRUZ
-**GPU:** NVIDIA RTX 5090 (32GB VRAM)
-**OS:** Windows 11 Pro
-**ComfyUI:** v0.8.1+
+**GPU:** NVIDIA GeForce RTX 5070 Ti (16.7 GB VRAM)
+**OS:** Linux
+**ComfyUI:** 0.33.1
 
 **Capabilities:**
-- Can run Wan 2.2 14B natively
-- LTX-2 4K generation without optimization
-- Batch multiple workflows simultaneously
-- Use NVFP4/NVFP8 precision for 3x speedup
+- SDXL/Pony/Illustrious at full quality; Flux dev fp8/GGUF with offload
+- 14B-class video models only quantized with offload, and slow
+- Run video and upscaling pipelines sequentially, not simultaneously
 
 **Optimal Settings:**
 ```bash
-# ComfyUI launch flags
---highvram \
---fp8_e4m3fn-unet \
---reserve-vram 7
+# Default launch flags (see foundation/hardware-profile.md)
+python main.py --listen
+# Optional for Flux workflows: --fp8_e4m3fn-unet
 ```
 
 ### Project: Sage Character Video Series

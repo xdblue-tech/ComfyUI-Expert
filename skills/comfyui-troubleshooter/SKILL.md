@@ -80,8 +80,8 @@ See `references/troubleshooting.md` for the full error database.
 → Restart ComfyUI
 
 **10. Slow generation**
-→ Check if `--lowvram` is enabled (remove it on RTX 5090)
-→ Use `--highvram` instead
+→ Check for stale VRAM overrides in your launch command (e.g. `--lowvram`)
+→ Use the default launch flags from `foundation/hardware-profile.md`
 → Update cuDNN to 8800+
 → Enable SageAttention for Wan models
 

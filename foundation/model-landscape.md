@@ -4,7 +4,7 @@ Quick reference for model selection. Full specs in `references/models.md`.
 
 <!-- Updated: 2026-03-18 | Source: NVIDIA Blog, ComfyUI Changelog, HuggingFace, ComfyUI Blog -->
 
-> **ComfyUI Version**: v0.17.2 (March 15, 2026). Includes App Mode, Nodes 2.0 Vue, FluxKVCache node.
+> **ComfyUI Version**: v0.33.1 (installed; see `foundation/hardware-profile.md`). Includes App Mode, Nodes 2.0 Vue, FluxKVCache node.
 
 > **NVFP4 Critical Note**: NVFP4 acceleration on RTX 50 Series **requires PyTorch built with CUDA 13.0 (cu130)**. Without it, NVFP4 models run up to **2x slower** than FP8. Verify with `torch.version.cuda` before using NVFP4 checkpoints.
 

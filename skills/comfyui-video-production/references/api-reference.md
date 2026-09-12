@@ -109,11 +109,11 @@ Get system information
   },
   "devices": [
     {
-      "name": "NVIDIA GeForce RTX 5090",
+      "name": "NVIDIA GeForce RTX 5070 Ti",
       "type": "cuda",
       "index": 0,
-      "vram_total": 34359738368,
-      "vram_free": 12884901888
+      "vram_total": 16683565056,
+      "vram_free": 15386279936
     }
   ]
 }

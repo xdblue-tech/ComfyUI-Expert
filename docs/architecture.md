@@ -67,6 +67,8 @@ Large files read only when the selected skill needs detailed material.
 | `references/prompt-templates.md` | Model-specific prompt strategies |
 | `references/troubleshooting.md` | Error database and recovery guidance |
 | `references/research-log.md` | Technique survey and research history |
+| `references/evolution.md` | Skill update protocol and user-specific learnings |
+| `references/staleness-report.md` | Research freshness report read by `scripts/session.py` |
 
 ## Skill dependency graph
 
@@ -135,7 +137,7 @@ The inventory schema is:
   "last_updated": "2026-09-12T18:00:00+00:00",
   "mode": "online",
   "comfyui_version": "0.33.1",
-  "comfyui_path": "/home/user/ComfyUI",
+  "comfyui_path": "",
   "comfyui_url": "http://127.0.0.1:8188",
   "system": {
     "gpu": "cuda:0 NVIDIA GeForce RTX 5070 Ti",
@@ -146,7 +148,7 @@ The inventory schema is:
     "checkpoints": ["a.safetensors"],
     "loras": []
   },
-  "custom_nodes": ["SomeNode"],
+  "custom_nodes": [],
   "node_classes": ["KSampler"]
 }
 ```

@@ -143,18 +143,18 @@ ComfyUI-Frame-Interpolation  # Smooth video
 
 ## RTX 50 Series Optimization (NEW 2026)
 
-With 32GB VRAM on RTX 5090, run most workflows without optimization. **ComfyUI v0.8.1** adds major RTX 50 Series enhancements:
+Read `foundation/hardware-profile.md` for this machine's limits: 16.7 GB VRAM (RTX 5070 Ti). RTX 50 Series enhancements:
 
 ```
-Launch flags: --highvram --fp8_e4m3fn-unet
+Launch flags: python main.py --listen      # defaults; optional --fp8_e4m3fn-unet for FLUX
 ```
 
-**NEW v0.8.1 Features:**
+**RTX 50 Series Features:**
 - **NVFP4/NVFP8 precision formats**: 3x faster performance, 60% VRAM reduction on RTX 50 Series
 - **Weight streaming**: Uses system RAM when VRAM exhausted, enables larger models on mid-range GPUs
 - Enable tiled VAE for 8K+ upscaling
-- Batch 4× 1024×1024 generations in parallel
-- Run Wan 2.2 14B + LTX-2 natively
+- Keep batches at 1-2× 1024×1024 and queue jobs sequentially
+- Run 14B video models only quantized with offload
 - Use FP8 quantization for FLUX (50% VRAM reduction)
 
 ## Workflow Generation Process

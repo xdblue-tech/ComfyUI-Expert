@@ -106,12 +106,19 @@ def print_summary(data, stats, staleness):
             f"{device.get('vram_total', 0) / 1e9:.1f} GB)"
         )
     if INVENTORY_PATH.is_file():
-        inv = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
-        total = sum(len(v) for v in inv.get("models", {}).values())
-        print(
-            f"  inventory    : {inv.get('last_updated', '?')}, {total} models "
-            f"(mode={inv.get('mode', '?')})"
-        )
+        try:
+            inv = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
+            total = sum(len(v) for v in inv.get("models", {}).values())
+        except (OSError, ValueError, AttributeError, TypeError):
+            print(
+                "  inventory    : unreadable — re-run "
+                "python3 scripts/scan_inventory.py"
+            )
+        else:
+            print(
+                f"  inventory    : {inv.get('last_updated', '?')}, {total} models "
+                f"(mode={inv.get('mode', '?')})"
+            )
     else:
         print("  inventory    : missing. Run: python3 scripts/scan_inventory.py")
     print(f"  research     : {staleness['note']}")
@@ -125,7 +132,17 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     if STALENESS_REPORT.is_file():
-        staleness = parse_staleness(STALENESS_REPORT.read_text(encoding="utf-8"))
+        try:
+            staleness = parse_staleness(
+                STALENESS_REPORT.read_text(encoding="utf-8")
+            )
+        except (OSError, ValueError):
+            staleness = {
+                "last_run": None,
+                "days": None,
+                "stale": False,
+                "note": "references/staleness-report.md is unreadable.",
+            }
     else:
         staleness = {
             "last_run": None,

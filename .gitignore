@@ -22,5 +22,9 @@ Desktop.ini
 
 # pi personal project config (machine-specific)
 .pi/settings.json
+
+# Python caches
 __pycache__/
+.pytest_cache/
+.ruff_cache/
 

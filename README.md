@@ -76,6 +76,7 @@ ComfyUI-Expert/
 |-- .agents/skills -> ../skills  Skill discovery symlink
 |-- AGENTS.md                    Canonical agent instructions
 |-- CLAUDE.md                    Pointer to AGENTS.md
+|-- LICENSE                      Repository license (MIT)
 |-- README.md
 |-- docs/
 |   |-- architecture.md

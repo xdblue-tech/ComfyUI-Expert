@@ -99,7 +99,7 @@ VRAM usage is **invariant to video length** - generates 60-second videos at 30fp
 ### When to Use
 
 - Videos longer than 10 seconds
-- Limited VRAM systems (but RTX 5090 doesn't need this)
+- Limited VRAM systems (FramePack runs in ~6 GB, leaving VRAM for other models)
 - When VRAM is needed for parallel operations
 - Batch video generation
 

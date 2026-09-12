@@ -71,11 +71,9 @@ class PathDetectionTests(unittest.TestCase):
                 self.assertEqual(si.detect_comfyui_path(), Path(tmp))
 
     def test_detect_skips_non_comfyui_dirs(self):
-        with (
-            tempfile.TemporaryDirectory() as tmp,
-            mock.patch.dict(os.environ, {}, clear=True),
-        ):
-            self.assertIsNone(si.detect_comfyui_path(candidates=[Path(tmp)]))
+        with tempfile.TemporaryDirectory() as tmp:  # noqa: SIM117
+            with mock.patch.dict(os.environ, {}, clear=True):
+                self.assertIsNone(si.detect_comfyui_path(candidates=[Path(tmp)]))
 
 
 if __name__ == "__main__":

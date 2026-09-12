@@ -42,8 +42,8 @@ updated: "{ISO date}"
 status: active  # active | paused | completed | archived
 
 hardware:
-  gpu: "RTX 5090"
-  vram: 32
+  gpu: "RTX 5070 Ti"
+  vram: 16.7
 
 defaults:
   checkpoint: ""         # Filled after first successful generation

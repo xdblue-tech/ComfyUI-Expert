@@ -99,9 +99,9 @@ Save results to `state/inventory.json`:
   "mode": "online",
   "comfyui_version": "0.3.10",
   "system": {
-    "gpu": "NVIDIA RTX 5090",
-    "vram_total_gb": 32,
-    "vram_free_gb": 28
+    "gpu": "cuda:0 NVIDIA GeForce RTX 5070 Ti",
+    "vram_total_gb": 16.7,
+    "vram_free_gb": 15.5
   },
   "models": {
     "checkpoints": ["flux1-dev.safetensors", "RealVisXL_V5.0.safetensors"],
