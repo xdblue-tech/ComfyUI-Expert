@@ -9,6 +9,7 @@ Track updates, new techniques, and user-specific learnings for the ComfyUI Video
 ### v1.0.0 (February 2026 - Initial Release)
 
 **Core Features:**
+
 - Complete keyframe-to-video pipeline
 - Batch I2V processing system
 - Professional video concatenation with transitions
@@ -19,6 +20,7 @@ Track updates, new techniques, and user-specific learnings for the ComfyUI Video
 - FFmpeg integration for transitions
 
 **Supported Models:**
+
 - LTX-2 (4K production video)
 - Wan 2.2 MoE (film-quality)
 - Wan 2.1 14B & 1.3B
@@ -26,6 +28,7 @@ Track updates, new techniques, and user-specific learnings for the ComfyUI Video
 - SVD (Stable Video Diffusion)
 
 **Documentation:**
+
 - Main SKILL.md with 3 core pipelines
 - instance-management.md - ComfyUI health & restart
 - concatenation.md - FFmpeg transitions & audio
@@ -33,6 +36,7 @@ Track updates, new techniques, and user-specific learnings for the ComfyUI Video
 - evolution.md - This file
 
 **Key Capabilities:**
+
 - Automatic error recovery with retry strategies
 - Progress tracking with real-time ETA
 - Quality validation (resolution, FPS, codec)
@@ -47,30 +51,35 @@ Track updates, new techniques, and user-specific learnings for the ComfyUI Video
 ### I2V Model Releases (Check Weekly)
 
 **HuggingFace Trending**
-- https://huggingface.co/models?sort=trending&pipeline_tag=video-generation
+
+- <https://huggingface.co/models?sort=trending&pipeline_tag=video-generation>
 - Watch for: New video diffusion models, improved versions of Wan/LTX
 
 **GitHub Repositories**
-- https://github.com/Lightricks/LTX-Video - LTX updates
-- https://github.com/alibaba/VideoX - Wan updates
-- https://github.com/Kosinkadink/ComfyUI-AnimateDiff-Evolved - AnimateDiff
-- https://github.com/comfyanonymous/ComfyUI - Core ComfyUI updates
+
+- <https://github.com/Lightricks/LTX-Video> - LTX updates
+- <https://github.com/alibaba/VideoX> - Wan updates
+- <https://github.com/Kosinkadink/ComfyUI-AnimateDiff-Evolved> - AnimateDiff
+- <https://github.com/comfyanonymous/ComfyUI> - Core ComfyUI updates
 
 **Research Papers**
-- https://arxiv.org/list/cs.CV/recent - Computer vision (video gen)
-- https://huggingface.co/papers - Daily ML papers
+
+- <https://arxiv.org/list/cs.CV/recent> - Computer vision (video gen)
+- <https://huggingface.co/papers> - Daily ML papers
 - Search: "image to video", "video diffusion", "temporal consistency"
 
 ### ComfyUI Updates (Check Weekly)
 
 **Official Releases**
-- https://github.com/comfyanonymous/ComfyUI/releases
+
+- <https://github.com/comfyanonymous/ComfyUI/releases>
 - Watch for: API changes, performance improvements, new features
 
 **Custom Nodes**
-- https://github.com/ltdrdata/ComfyUI-Manager - Manager updates
-- https://github.com/Fannovel16/ComfyUI-Frame-Interpolation - RIFE/FILM
-- https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite - Video tools
+
+- <https://github.com/ltdrdata/ComfyUI-Manager> - Manager updates
+- <https://github.com/Fannovel16/ComfyUI-Frame-Interpolation> - RIFE/FILM
+- <https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite> - Video tools
 
 ### Community Knowledge (Check Monthly)
 
@@ -158,11 +167,13 @@ Track what works for specific user setups and projects.
 **ComfyUI:** 0.33.1
 
 **Capabilities:**
+
 - SDXL/Pony/Illustrious at full quality; Flux dev fp8/GGUF with offload
 - 14B-class video models only quantized with offload, and slow
 - Run video and upscaling pipelines sequentially, not simultaneously
 
 **Optimal Settings:**
+
 ```bash
 # Default launch flags (see foundation/hardware-profile.md)
 python main.py --listen
@@ -176,6 +187,7 @@ python main.py --listen
 **Style:** Photorealistic, natural lighting, intimate/sensual
 
 **Workflow Preferences:**
+
 - Keyframe generation: FLUX.1-dev + IP-Adapter (0.80 weight)
 - I2V model: Wan 2.2 MoE 14B (film-quality aesthetics)
 - Resolution: 768x1024 (portrait) or 832x1216 (larger)
@@ -183,12 +195,14 @@ python main.py --listen
 - Transitions: 0.5s crossfade (smooth but not slow)
 
 **What Worked:**
+
 - ✓ Generating 5 keyframes first, validating consistency before I2V
 - ✓ Using consistent motion prompts with "consistent identity, same person" prefix
 - ✓ Staggering I2V submissions (3-5 minute wait between clips)
 - ✓ Validating each clip immediately after generation
 
 **What Didn't Work:**
+
 - ✗ Submitting all 5 I2V jobs at once (overwhelmed queue)
 - ✗ Using cv2.VideoWriter for concatenation (quality loss, wrong codec)
 - ✗ Not validating FPS before concat (got 25fps instead of 16fps)
@@ -196,6 +210,7 @@ python main.py --listen
 - ✗ Manual file selection for concatenation (forgot clips 1 & 4)
 
 **Lessons Learned:**
+
 1. **Always validate before proceeding** - Check keyframes, then check videos
 2. **Use FFmpeg, not cv2** - Better quality, proper codec support
 3. **Automate everything** - Manual steps = mistakes
@@ -209,12 +224,14 @@ python main.py --listen
 ### v1.1.0 (Planned)
 
 **New Features:**
+
 - Keyframe generation reference guide
 - I2V workflow templates for all supported models
 - Validation reference with face consistency checking
 - Troubleshooting guide with common issues
 
 **Improvements:**
+
 - Add frame interpolation between I2V clips
 - Support for audio addition/mixing
 - Color grading pipeline
@@ -223,6 +240,7 @@ python main.py --listen
 ### v1.2.0 (Future)
 
 **Advanced Features:**
+
 - Multi-GPU support for parallel generation
 - Cloud instance integration (RunPod, Vast.ai)
 - Voice synthesis integration (TTS Audio Suite)
@@ -233,17 +251,20 @@ python main.py --listen
 ## Research Tasks
 
 ### Weekly
+
 - [ ] Check HuggingFace for new video generation models
 - [ ] Review ComfyUI releases for breaking changes
 - [ ] Monitor community forums for common issues
 
 ### Monthly
+
 - [ ] Deep dive on any major new I2V model releases
 - [ ] Review video generation research papers
 - [ ] Test new custom nodes for video workflows
 - [ ] Update benchmark comparisons
 
 ### Quarterly
+
 - [ ] Full skill audit - are recommendations still current?
 - [ ] Remove deprecated models/techniques
 - [ ] Major version bump if significant changes
@@ -255,16 +276,19 @@ python main.py --listen
 ### With Other Skills
 
 **comfyui-character-gen**
+
 - Use for generating consistent keyframes with LoRA/IP-Adapter
 - Character consistency validation across frames
 - Identity preservation techniques
 
 **youtube-uploader**
+
 - Direct upload to YouTube after production
 - Metadata extraction for title/description
 - Thumbnail generation from keyframes
 
 **video-assembly** (if exists)
+
 - Advanced editing and color grading
 - Multi-track audio mixing
 - Effects and overlays
@@ -300,7 +324,7 @@ If this skill helps you, consider contributing:
 ## Version History
 
 | Version | Date | Key Changes |
-|---------|------|-------------|
+| --------- | ------ | ------------- |
 | v1.0.0 | 2026-02-16 | Initial release with core pipelines |
 | v1.0.1 | TBD | Bug fixes and documentation improvements |
 | v1.1.0 | TBD | New reference guides and validation suite |
@@ -310,7 +334,7 @@ If this skill helps you, consider contributing:
 
 ## Contact & Support
 
-**GitHub Repo:** https://github.com/MCKRUZ/ComfyUI-Expert
+**GitHub Repo:** <https://github.com/MCKRUZ/ComfyUI-Expert>
 
 **Issues:** Report problems or request features via GitHub Issues
 

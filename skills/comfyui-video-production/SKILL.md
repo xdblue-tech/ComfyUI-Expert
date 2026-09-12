@@ -127,7 +127,7 @@ End-to-end video production orchestration for ComfyUI with automatic error recov
 ### Image-to-Video Models
 
 | Model | Quality | Speed | VRAM | Best For | Notes |
-|-------|---------|-------|------|----------|-------|
+| ------- | --------- | ------- | ------ | ---------- | ------- |
 | **LTX-2** | ★★★★★ | Medium | 16GB+ | **Production 4K video** | Native 4K, audio+video |
 | **Wan 2.2 MoE** | ★★★★★ | Slow | 24GB+ | **Film-quality aesthetics** | First+last frame control |
 | Wan 2.1 14B | ★★★★ | Slow | 24GB | High quality | Proven, stable |
@@ -138,7 +138,7 @@ End-to-end video production orchestration for ComfyUI with automatic error recov
 ### Transition Effects
 
 | Effect | Use Case | Encoding Cost |
-|--------|----------|---------------|
+| -------- | ---------- | --------------- |
 | **Crossfade** | General purpose | Low |
 | **Motion blur** | High-motion scenes | Medium |
 | **Zoom in/out** | Dramatic emphasis | Medium |
@@ -395,6 +395,7 @@ batch_size = 4  # Process 4 at a time
 ## Integration with Other Skills
 
 **Pair with:**
+
 - `comfyui-character-gen` - For generating initial keyframes with identity preservation
 - `video-assembly` - For advanced editing and post-production
 - `youtube-uploader` - For direct upload to YouTube after production
@@ -483,6 +484,7 @@ When asked to create a video production workflow:
 ## Best Practices
 
 ### For Keyframe Videos
+
 - Use same seed across all keyframes (consistency)
 - IP-Adapter weight 0.75-0.85 (strong but not rigid)
 - Validate keyframes before I2V (saves compute)
@@ -490,12 +492,14 @@ When asked to create a video production workflow:
 - Use 0.5-1s crossfade transitions (smooth but not slow)
 
 ### For Batch Processing
+
 - Process in small batches (4-8 at a time)
 - Validate immediately after each batch
 - Save checkpoint after each successful batch
 - Use priority queue for important clips
 
 ### For Instance Management
+
 - Monitor queue depth every 30s
 - Restart if no progress for 5 minutes
 - Keep backup instance ready on different port
@@ -506,6 +510,7 @@ When asked to create a video production workflow:
 ## Performance Optimization
 
 ### RTX 50 Series (2026)
+
 ```bash
 # Default launch flags for this machine (see foundation/hardware-profile.md)
 python main.py --listen
@@ -518,6 +523,7 @@ python main.py --listen
 ```
 
 ### AMD GPUs (ROCm)
+
 ```bash
 # ComfyUI v0.8.1+ has native ROCm support
 # No special flags needed, just install ROCm drivers
@@ -528,6 +534,7 @@ python main.py --listen
 ## Skill Evolution
 
 This skill adapts to new I2V models and techniques. When new models release:
+
 1. Add model specs to `references/i2v-workflows.md`
 2. Create workflow template for new model
 3. Update model selection logic in main pipeline

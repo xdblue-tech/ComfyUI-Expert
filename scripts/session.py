@@ -111,8 +111,7 @@ def print_summary(data, stats, staleness):
             total = sum(len(v) for v in inv.get("models", {}).values())
         except (OSError, ValueError, AttributeError, TypeError):
             print(
-                "  inventory    : unreadable — re-run "
-                "python3 scripts/scan_inventory.py"
+                "  inventory    : unreadable — re-run python3 scripts/scan_inventory.py"
             )
         else:
             print(
@@ -133,9 +132,7 @@ def main(argv=None):
 
     if STALENESS_REPORT.is_file():
         try:
-            staleness = parse_staleness(
-                STALENESS_REPORT.read_text(encoding="utf-8")
-            )
+            staleness = parse_staleness(STALENESS_REPORT.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             staleness = {
                 "last_run": None,

@@ -35,6 +35,7 @@ Load Reference Face → InstantID + IP-Adapter FaceID → ControlNet Pose → KS
 ```
 
 **Critical settings:**
+
 - CFG: 4-5 (prevents burning with InstantID)
 - Resolution: 1016×1016 (avoids watermark artifacts)
 - IP-Adapter weight: 0.6-0.8
@@ -51,6 +52,7 @@ Train LoRA → Load LoRA + Checkpoint → Add InstantID/PuLID → Generate → F
 ```
 
 **Training requirements:**
+
 - 15-30 images, varied poses/expressions/lighting
 - Unique trigger word (e.g., "sage_character")
 - See `references/lora-training.md` for full parameters
@@ -64,6 +66,7 @@ Generate/Load Hero Image → Wan 2.1 I2V OR AnimateDiff → FaceDetailer per fra
 ```
 
 **Model selection:**
+
 - Wan 2.1 14B: Best quality, 24GB+ VRAM, slower
 - Wan 2.1 1.3B: 8GB VRAM, good quality, faster
 - AnimateDiff Lightning: Fastest, best for iteration
@@ -87,8 +90,9 @@ See `references/talking-head-workflows.md` for complete workflows and `reference
 ## Model Recommendations (2026 Updated)
 
 ### Image Generation
+
 | Use Case | Model | Notes |
-|----------|-------|-------|
+| ---------- | ------- | ------- |
 | Best photorealism | FLUX.1-dev | Slow but superior quality |
 | Multi-reference consistency | **FLUX.2** | **NEW 2026**: Up to 10 ref images, strong identity preservation |
 | Fast iteration | RealVisXL V5.0 | Good balance speed/quality |
@@ -96,8 +100,9 @@ See `references/talking-head-workflows.md` for complete workflows and `reference
 | Iterative refinement | FLUX Kontext Pro/Max | 8x faster than GPT-Image (API) |
 
 ### Identity Preservation (2026 State-of-Art)
+
 | Method | Best For | VRAM | Notes |
-|--------|----------|------|-------|
+| -------- | ---------- | ------ | ------- |
 | **FLUX.2** | Multi-reference consistency | 24GB+ | **NEW 2026**: Up to 10 ref images, branded content |
 | **InfiniteYou** | Highest identity match | 24GB | ICCV 2025 Highlight, SIM/AES variants |
 | **FLUX Kontext** | Iterative editing | 12-32GB | Built-in consistency, no retraining |
@@ -107,8 +112,9 @@ See `references/talking-head-workflows.md` for complete workflows and `reference
 | IP-Adapter FaceID | Speed, lower VRAM | 6GB+ | Good baseline approach |
 
 ### Video Generation
+
 | Model | Quality | Speed | VRAM | Notes |
-|-------|---------|-------|------|-------|
+| ------- | --------- | ------- | ------ | ------- |
 | **LTX-2** | ★★★★★ | Medium | 16GB+ | **NEW 2026**: First open-source 4K audio+video, production-ready |
 | **Wan 2.2 MoE** | ★★★★★ | Slow | 24GB+ | Film-level aesthetics, first+last frame control |
 | **FramePack** | ★★★★★ | Medium | **6GB** | 60-sec videos, VRAM-invariant breakthrough |
@@ -116,8 +122,9 @@ See `references/talking-head-workflows.md` for complete workflows and `reference
 | AnimateDiff V3 | ★★★ | Fast | 8GB | Motion/camera LoRAs, infinite length |
 
 ### Voice/TTS
+
 | Tool | License | Quality | Features |
-|------|---------|---------|----------|
+| ------ | --------- | --------- | ---------- |
 | **TTS Audio Suite** | Multi | ★★★★★ | Unified platform, 23 languages, emotion control |
 | **F5-TTS** | MIT | ★★★★ | Zero-shot from <15 sec samples, **Cross-Lingual 2026** |
 | Chatterbox | MIT | ★★★★★ | Paralinguistic tags (`[laugh]`, `[sigh]`), 4 voices |
@@ -150,6 +157,7 @@ Launch flags: python main.py --listen      # defaults; optional --fp8_e4m3fn-une
 ```
 
 **RTX 50 Series Features:**
+
 - **NVFP4/NVFP8 precision formats**: 3x faster performance, 60% VRAM reduction on RTX 50 Series
 - **Weight streaming**: Uses system RAM when VRAM exhausted, enables larger models on mid-range GPUs
 - Enable tiled VAE for 8K+ upscaling
@@ -186,14 +194,17 @@ When building a workflow for a user:
 This skill is designed to evolve. When helping the user:
 
 **Before starting a workflow:**
+
 - Check if new models have dropped that might be better (search HuggingFace/Civitai if uncertain)
 - Consider if user's past successes/failures inform the approach
 
 **After completing a workflow:**
+
 - Note what worked well or poorly for future reference
 - If user discovers better settings, update the relevant reference file
 
 **Proactive updates:**
+
 - When the user mentions a new model or technique, research and integrate it
 - Periodically suggest checking for updates to key dependencies
 

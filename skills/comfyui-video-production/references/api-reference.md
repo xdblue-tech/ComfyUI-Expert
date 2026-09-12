@@ -11,6 +11,7 @@ http://127.0.0.1:8188
 ```
 
 For multiple instances:
+
 - Primary: `http://127.0.0.1:8188`
 - Secondary: `http://127.0.0.1:8189`
 - Backup: `http://127.0.0.1:8190`
@@ -24,6 +25,7 @@ For multiple instances:
 Get current queue status
 
 **Response:**
+
 ```json
 {
   "queue_running": [
@@ -40,6 +42,7 @@ Get current queue status
 Submit new workflow to queue
 
 **Request:**
+
 ```json
 {
   "prompt": {
@@ -58,6 +61,7 @@ Submit new workflow to queue
 ```
 
 **Response:**
+
 ```json
 {
   "prompt_id": "abc123-def456-ghi789",
@@ -71,6 +75,7 @@ Submit new workflow to queue
 Get execution history
 
 **Response:**
+
 ```json
 {
   "prompt_id_1": {
@@ -100,6 +105,7 @@ Get execution history
 Get system information
 
 **Response:**
+
 ```json
 {
   "system": {
@@ -124,6 +130,7 @@ Get system information
 Unload models and free VRAM
 
 **Request:**
+
 ```json
 {
   "unload_models": true,
@@ -515,21 +522,26 @@ except Exception as e:
 ## Common Issues
 
 ### Issue: Connection refused
+
 **Cause:** ComfyUI not running or wrong port
 **Fix:** Check if ComfyUI is running on expected port
 
 ### Issue: Workflow validation errors
+
 **Cause:** Invalid node inputs or missing required fields
 **Fix:** Validate workflow structure before submission
 
 ### Issue: Timeout waiting for completion
+
 **Cause:** Workflow taking too long or stuck
 **Fix:** Increase timeout or use interrupt endpoint
 
 ### Issue: Queue depth growing
+
 **Cause:** Submitting faster than processing
 **Fix:** Implement backpressure - check queue before submitting
 
 ### Issue: VRAM out of memory
+
 **Cause:** Models not unloading between workflows
 **Fix:** Call `/free` endpoint periodically

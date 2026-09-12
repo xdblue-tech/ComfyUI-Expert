@@ -38,14 +38,16 @@ VIDEO REQUEST
 ### Image-to-Video
 
 **Prerequisites:**
+
 - `wan2.1_i2v_720p_14b_bf16.safetensors` in `models/diffusion_models/`
 - `umt5_xxl_fp8_e4m3fn_scaled.safetensors` in `models/clip/`
 - `open_clip_vit_h_14.safetensors` in `models/clip_vision/`
 - `wan_2.1_vae.safetensors` in `models/vae/`
 
 **Settings:**
+
 | Parameter | Value | Notes |
-|-----------|-------|-------|
+| ----------- | ------- | ------- |
 | Resolution | 1280x720 (landscape) or 720x1280 (portrait) | Native training resolution |
 | Frames | 81 (~5 seconds at 16fps) | Multiples of 4 + 1 |
 | Steps | 30-50 | Higher = better quality |
@@ -54,14 +56,16 @@ VIDEO REQUEST
 | Scheduler | normal | |
 
 **Frame count guide:**
+
 | Duration | Frames (16fps) |
-|----------|----------------|
+| ---------- | ---------------- |
 | 1 second | 17 |
 | 3 seconds | 49 |
 | 5 seconds | 81 |
 | 10 seconds | 161 |
 
 **VRAM optimization:**
+
 - FP8 quantization: halves VRAM with minimal quality loss
 - SageAttention: faster attention computation
 - Reduce frames if OOM
@@ -73,6 +77,7 @@ Same as I2V but uses `wan2.1_t2v_14b_bf16.safetensors` and `EmptySD3LatentImage`
 ### First+Last Frame Control (Wan 2.2 Exclusive)
 
 Wan 2.2 MoE allows specifying both the first and last frame, enabling precise video planning:
+
 1. Generate two hero images with consistent character
 2. Use first as start frame, second as end frame
 3. Wan interpolates the motion between them
@@ -84,6 +89,7 @@ Wan 2.2 MoE allows specifying both the first and last frame, enabling precise vi
 VRAM usage is **invariant to video length** - generates 60-second videos at 30fps on just 6GB VRAM.
 
 **How it works:**
+
 - Dynamic context compression: 1536 markers for key frames, 192 for transitions
 - Bidirectional memory with reverse generation prevents drift
 - Frame-by-frame generation with context window
@@ -91,7 +97,7 @@ VRAM usage is **invariant to video length** - generates 60-second videos at 30fp
 ### Settings
 
 | Parameter | Value | Notes |
-|-----------|-------|-------|
+| ----------- | ------- | ------- |
 | Resolution | 640x384 to 1280x720 | Depends on VRAM |
 | Duration | Up to 60 seconds | VRAM-invariant |
 | Quality | High (comparable to Wan) | Uses same base models |
@@ -115,7 +121,7 @@ VRAM usage is **invariant to video length** - generates 60-second videos at 30fp
 ### Settings
 
 | Parameter | Value (Standard) | Value (Lightning) |
-|-----------|-----------------|-------------------|
+| ----------- | ----------------- | ------------------- |
 | Motion Module | `v3_sd15_mm.ckpt` | `animatediff_lightning_4step.safetensors` |
 | Steps | 20-25 | 4-8 |
 | CFG | 7-8 | 1.5-2.0 |
@@ -127,7 +133,7 @@ VRAM usage is **invariant to video length** - generates 60-second videos at 30fp
 ### Camera Motion LoRAs
 
 | LoRA | Motion |
-|------|--------|
+| ------ | -------- |
 | v2_lora_ZoomIn | Camera zooms in |
 | v2_lora_ZoomOut | Camera zooms out |
 | v2_lora_PanLeft | Camera pans left |
@@ -143,6 +149,7 @@ After any video generation:
 ### 1. Frame Interpolation (RIFE)
 
 Doubles or quadruples frame count for smoother motion:
+
 ```
 Input (16fps) → RIFE 2x → Output (32fps)
 Input (16fps) → RIFE 4x → Output (64fps)
@@ -153,6 +160,7 @@ Use `rife47` or `rife49` model.
 ### 2. Face Enhancement (if character video)
 
 Apply FaceDetailer to each frame:
+
 - denoise: 0.3-0.4 (lower than image - preserves temporal consistency)
 - guide_size: 384 (speed optimization for video)
 - detection_model: face_yolov8m.pt
@@ -168,6 +176,7 @@ Maintain consistent color grading across frames.
 ### 5. Video Combine
 
 Final output via VHS Video Combine:
+
 ```
 frame_rate: 16 (native) or 24/30 (after interpolation)
 format: "video/h264-mp4"
@@ -191,6 +200,7 @@ Complete pipeline for character dialogue:
 ## Quality Checklist
 
 Before marking video as complete:
+
 - [ ] Character identity consistent across frames
 - [ ] No flickering or temporal artifacts
 - [ ] Motion looks natural (not jerky or frozen)

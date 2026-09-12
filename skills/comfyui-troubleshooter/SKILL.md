@@ -14,7 +14,7 @@ Diagnoses and resolves ComfyUI issues across four categories: server errors, wor
 ### Step 1: Classify the Error
 
 | Category | Symptoms | First Check |
-|----------|----------|-------------|
+| ---------- | ---------- | ------------- |
 | **Server** | Connection refused, timeouts, crashes | Is ComfyUI running? Check `/system_stats` |
 | **Workflow** | Node errors, missing inputs, type mismatches | Validate workflow against inventory |
 | **Quality** | Artifacts, wrong identity, blurry output | Check settings (CFG, weights, resolution) |
@@ -23,6 +23,7 @@ Diagnoses and resolves ComfyUI issues across four categories: server errors, wor
 ### Step 2: Gather Context
 
 Collect before diagnosing:
+
 1. **Error message** (exact text)
 2. **Workflow** being executed (or description)
 3. **Models** involved (checkpoint, LoRA, ControlNet, etc.)
@@ -118,6 +119,7 @@ OUTPUT LOOKS WRONG
 When a workflow references something not in inventory:
 
 ### Missing Custom Node
+
 ```
 1. Identify package from class_type (see inventory skill's mapping)
 2. Suggest: "Open ComfyUI-Manager → Search → Install {package_name}"
@@ -126,6 +128,7 @@ When a workflow references something not in inventory:
 ```
 
 ### Missing Model
+
 ```
 1. Look up in references/models.md for download link
 2. Provide: exact filename, download URL, target directory
@@ -134,6 +137,7 @@ When a workflow references something not in inventory:
 ```
 
 ### Version Incompatibility
+
 ```
 1. Check ComfyUI version vs node package requirements
 2. Suggest: "cd {ComfyUI} && git pull" for ComfyUI update
