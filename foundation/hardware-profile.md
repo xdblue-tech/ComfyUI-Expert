@@ -4,7 +4,7 @@
 
 - **Model**: NVIDIA GeForce RTX 5070 Ti
 - **VRAM**: 16.7 GB (reported by CUDA; plan for ~16 GB usable)
-- **ComfyUI**: 0.33.1 at http://127.0.0.1:8188, source at /home/xdblue/ComfyUI
+- **ComfyUI**: 0.33.1 at <http://127.0.0.1:8188>, source at /home/xdblue/ComfyUI
 - **OS**: Linux, Python 3.14
 
 ## Capabilities at 16.7 GB VRAM

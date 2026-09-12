@@ -13,7 +13,7 @@ Quick reference for model selection. Full specs in `references/models.md`.
 ## Image Generation
 
 | Rank | Model | Best For | VRAM | Notes |
-|------|-------|----------|------|-------|
+| ------ | ------- | ---------- | ------ | ------- |
 | 1 | **FLUX.2 [dev]** | Photorealism, 4MP, multi-reference | 24GB+ | 32B params, NVFP4/NVFP8; up to 10 ref images |
 | 2 | FLUX.2 [klein] | Fast generation, low VRAM | 12GB+ (4B) / 20GB+ (9B) | Sub-second on enterprise; distilled = 4 steps |
 | 3 | FLUX Kontext | Iterative character editing | 12GB+ (fp8) | NVFP4 available |
@@ -25,7 +25,7 @@ Quick reference for model selection. Full specs in `references/models.md`.
 ## Identity Preservation
 
 | Rank | Method | Best For | VRAM | Notes |
-|------|--------|----------|------|-------|
+| ------ | -------- | ---------- | ------ | ------- |
 | 1 | InfiniteYou | Highest identity fidelity | 24GB | ByteDance, ICCV 2025 Highlight; official ComfyUI node |
 | 2 | FLUX Kontext | Edit without retraining | 12GB+ (fp8) | Multi-round editing chains |
 | 3 | **PuLID Flux 2** | FLUX.2 family (Klein + Dev) | 24-40GB | **NEW Mar 2026**, auto model detection, WaveSpeed compat |
@@ -35,7 +35,7 @@ Quick reference for model selection. Full specs in `references/models.md`.
 ## Video Generation
 
 | Rank | Model | Best For | VRAM | Notes |
-|------|-------|----------|------|-------|
+| ------ | ------- | ---------- | ------ | ------- |
 | 1 | **LTX-2.3** | 4K audio+video, portrait, production | 24GB+ | **NEW Mar 2026**, Day-0 support, GGUF available |
 | 2 | **Wan 2.6** | Reference-to-video, lip-sync, audio | 24GB+ | **NEW Jan 2026**, 1080p, native audio gen |
 | 3 | Wan 2.2 MoE | Film-level quality, first+last frame | 24GB+ | A14B model |
@@ -49,7 +49,7 @@ Quick reference for model selection. Full specs in `references/models.md`.
 ## 3D Generation
 
 | Rank | Model | Best For | VRAM | Notes |
-|------|-------|----------|------|-------|
+| ------ | ------- | ---------- | ------ | ------- |
 | 1 | Hunyuan 3D 3.0 | Text/image/sketch to 3D | 16GB+ | Partner Nodes; PBR materials |
 | 2 | **Hunyuan3D-2.1** | Open-source 3D with PBR | 16GB+ | Fully open-sourced with training code |
 | 3 | **Rodin3D Gen-2** | Image-to-3D | Cloud/Partner | **NEW Mar 2026**, via Partner Nodes |
@@ -57,7 +57,7 @@ Quick reference for model selection. Full specs in `references/models.md`.
 ## Voice / TTS
 
 | Rank | Tool | Best For | License | Notes |
-|------|------|----------|---------|-------|
+| ------ | ------ | ---------- | --------- | ------- |
 | 1 | TTS Audio Suite | Unified 11-engine platform | Multi | ChatterBox, F5, Qwen3, IndexTTS-2, VibeVoice, RVC + more |
 | 2 | **Qwen3-TTS** | 10 languages, voice design | Open | **NEW Jan 2026**, zero-shot clone, text-based voice design |
 | 3 | Chatterbox Turbo | Fast emotion, MIT, production | MIT | 350M params, sub-200ms latency |
@@ -68,7 +68,7 @@ Quick reference for model selection. Full specs in `references/models.md`.
 ## Lip-Sync
 
 | Rank | Tool | Best For |
-|------|------|----------|
+| ------ | ------ | ---------- |
 | 1 | LatentSync 1.6 | Highest accuracy |
 | 2 | Wan 2.6 native | Reference-to-video with lip-sync |
 | 3 | Wav2Lip | Proven, works with any face |
@@ -77,7 +77,7 @@ Quick reference for model selection. Full specs in `references/models.md`.
 ## Performance Optimization
 
 | Tool | Speedup | VRAM Savings | Notes |
-|------|---------|-------------|-------|
+| ------ | --------- | ------------- | ------- |
 | Nunchaku v1.2.0 (SVDQuant) | 2-3x | 3.5x reduction | INT4 on RTX 20+ series; min 4GB for FLUX |
 | WaveSpeed (FBCache) | Up to 2x | Minimal | First block cache; works with LoRA |
 | TeaCache | ~30% | Minimal | No-training; best for video gen |
@@ -87,7 +87,7 @@ Quick reference for model selection. Full specs in `references/models.md`.
 ## LoRA Training Tools
 
 | Tool | Best For | FLUX.2 Support | Notes |
-|------|----------|:-:|-------|
+| ------ | ---------- | :-: | ------- |
 | Kohya ss (sd-scripts) | Gold standard, most configurable | Yes | IP noise gamma, CFG sampling for FLUX |
 | Musubi Tuner | Video LoRA (Wan/HunyuanVideo/FramePack) | Yes (dev+klein) | 20-30% VRAM savings with activation offload |
 | Ostris AI Toolkit | Simple FLUX training | Yes (dev+klein) | Apple MPS support incoming |
