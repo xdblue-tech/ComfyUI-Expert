@@ -19,3 +19,8 @@ Desktop.ini
 *.swp
 *.swo
 *~
+
+# pi personal project config (machine-specific)
+.pi/settings.json
+__pycache__/
+
