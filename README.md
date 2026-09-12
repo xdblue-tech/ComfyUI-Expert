@@ -214,7 +214,7 @@ The agent tracks the top models across five categories:
 |-------|----------|------|
 | FLUX.2 [dev] | Photorealism, 4MP, multi-reference (up to 10 images) | 24GB+ |
 | FLUX.2 [klein] | Fast generation, low VRAM (4B/9B distilled) | 12-20GB+ |
-| FLUX Kontext | Iterative character editing | 12-32GB |
+| FLUX Kontext | Iterative character editing | 12GB+ (fp8) |
 | Qwen-Image 2.0 | Typography, 2K resolution, layered editing | 24GB+ |
 | Z-Image | Non-distilled quality (Base) / fast (Turbo, 8 steps) | 12-16GB+ |
 
@@ -222,7 +222,7 @@ The agent tracks the top models across five categories:
 | Method | Best For | VRAM |
 |--------|----------|------|
 | InfiniteYou | Highest identity fidelity | 24GB |
-| FLUX Kontext | Edit without retraining | 12-32GB |
+| FLUX Kontext | Edit without retraining | 12GB+ (fp8) |
 | PuLID Flux 2 | FLUX.2 family (Klein + Dev) | 24-40GB |
 | PuLID Flux II | FLUX.1 dual characters, no pollution | 24-40GB |
 
@@ -258,18 +258,18 @@ Full specs and download links are in `references/models.md`.
 
 ## Hardware Profile
 
-VideoAgent is configured for an **RTX 5090 (32GB VRAM)** but works with any GPU. The agent adjusts recommendations based on available VRAM.
+Configured for an **RTX 5070 Ti (16.7 GB VRAM)**, verified against the running ComfyUI instance. The agent adjusts recommendations based on available VRAM.
 
-| Workload | 32GB Status | Notes |
-|----------|:-----------:|-------|
-| FLUX.1-dev FP16 | Native | No quantization needed |
-| Wan 2.2 14B | Native | Full quality |
-| FramePack | Overkill | Designed for 6GB |
-| PuLID Flux II | Native | Dual-character generation |
-| InfiniteYou | Native | Both SIM and AES variants |
-| LoRA Training (FLUX) | Native | No quantization needed |
+| Task class | 16.7 GB verdict |
+|------------|-----------------|
+| SDXL / Pony / Illustrious checkpoints | Full quality, no offload |
+| Flux dev (fp8 or GGUF Q8) | Viable, expect offload with large batches |
+| SD1.5 / SDXL ControlNet stacks | Viable |
+| LoRA training (SDXL) | Viable with small batch + gradient checkpointing |
+| 14B-class video models (Wan etc.) | Not installed; only GGUF quantized + offload, slow |
+| Simultaneous video + upscaler pipelines | Avoid; run sequentially |
 
-Recommended ComfyUI launch flags: `--highvram --fp8_e4m3fn-unet`
+Recommended ComfyUI launch flags: default flags (`python main.py --listen`). Do not use `--highvram`; `--fp8_e4m3fn-unet` is optional for Flux. Full guidance: `foundation/hardware-profile.md`.
 
 ## Project Structure
 

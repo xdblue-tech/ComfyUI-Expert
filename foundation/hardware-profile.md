@@ -1,39 +1,37 @@
 # Hardware Profile
 
 ## GPU
-- **Model**: NVIDIA RTX 5090
-- **VRAM**: 32GB GDDR7
-- **Architecture**: Blackwell
-- **Compute**: FP16, BF16, FP8 (native)
 
-## Capabilities at 32GB VRAM
+- **Model**: NVIDIA GeForce RTX 5070 Ti
+- **VRAM**: 16.7 GB (reported by CUDA; plan for ~16 GB usable)
+- **ComfyUI**: 0.33.1 at http://127.0.0.1:8188, source at /home/xdblue/ComfyUI
+- **OS**: Linux, Python 3.14
 
-| Workload | Status | Notes |
-|----------|--------|-------|
-| FLUX.1-dev FP16 | Native | No quantization needed |
-| FLUX.1-dev FP8 | Native | ~16GB, leaves room for other models |
-| Wan 2.2 14B | Native | Full quality, no compromises |
-| Wan 2.2 14B I2V | Native | 720p at 81 frames |
-| FramePack | Overkill | Designed for 6GB, runs effortlessly |
-| PuLID Flux II | Native | Dual-character generation works |
-| InfiniteYou | Native | Both SIM and AES variants |
-| AnimateDiff + LoRA | Native | Batch 4x possible |
-| SDXL + ControlNet stack | Native | Multiple ControlNets simultaneously |
-| LoRA Training (FLUX) | Native | Standard training, no quantization needed |
-| LoRA Training (SDXL) | Native | Batch size 2-4 |
+## Capabilities at 16.7 GB VRAM
+
+| Task class | 16.7 GB verdict |
+| ------------ | ----------------- |
+| SDXL / Pony / Illustrious checkpoints | Full quality, no offload |
+| Flux dev (fp8 or GGUF Q8) | Viable, expect offload with large batches |
+| SD1.5 / SDXL ControlNet stacks | Viable |
+| LoRA training (SDXL) | Viable with small batch + gradient checkpointing |
+| 14B-class video models (Wan etc.) | Not installed; only GGUF quantized + offload, slow |
+| Simultaneous video + upscaler pipelines | Avoid; run sequentially |
+
+> If you move this repo to a 32 GB card, restore a 32 GB capability table.
 
 ## Recommended Launch Flags
 
-```
---highvram --fp8_e4m3fn-unet
+```bash
+python main.py --listen
 ```
 
-- `--highvram`: Keep models in VRAM (no offloading needed)
-- `--fp8_e4m3fn-unet`: Optional FP8 for FLUX when running parallel models
+- Use the default flags. `--highvram` is not appropriate for a 16 GB card: it keeps models resident and causes OOM.
+- `--fp8_e4m3fn-unet` is optional, for Flux workflows.
 
 ## Performance Tips
 
-- Enable tiled VAE only for 8K+ upscaling
-- Batch 4x 1024x1024 generations in parallel
-- Use FP8 quantization for FLUX only when running concurrent workloads
-- cuDNN 8800+ recommended for maximum throughput
+- Queue jobs sequentially. Parallel batches of 4x 1024x1024 do not fit in 16.7 GB.
+- Enable tiled VAE for large upscales.
+- Use fp8 checkpoints for Flux when other models are resident.
+- cuDNN 8800+ recommended for maximum throughput.

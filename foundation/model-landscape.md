@@ -16,7 +16,7 @@ Quick reference for model selection. Full specs in `references/models.md`.
 |------|-------|----------|------|-------|
 | 1 | **FLUX.2 [dev]** | Photorealism, 4MP, multi-reference | 24GB+ | 32B params, NVFP4/NVFP8; up to 10 ref images |
 | 2 | FLUX.2 [klein] | Fast generation, low VRAM | 12GB+ (4B) / 20GB+ (9B) | Sub-second on enterprise; distilled = 4 steps |
-| 3 | FLUX Kontext | Iterative character editing | 12-32GB | NVFP4 available |
+| 3 | FLUX Kontext | Iterative character editing | 12GB+ (fp8) | NVFP4 available |
 | 4 | **Qwen-Image 2.0** | Typography, 2K, layered editing | 24GB+ (bf16/fp8) | 20B MMDiT, Apache 2.0, ControlNet support |
 | 5 | Z-Image (Base + Turbo) | Non-distilled quality / fast | 12-16GB+ | Turbo = 8 steps; Base = 30-50 steps, richer detail |
 | 6 | FLUX.1-dev | Proven photorealism | 16GB+ | NVFP4/NVFP8 available |
@@ -27,7 +27,7 @@ Quick reference for model selection. Full specs in `references/models.md`.
 | Rank | Method | Best For | VRAM | Notes |
 |------|--------|----------|------|-------|
 | 1 | InfiniteYou | Highest identity fidelity | 24GB | ByteDance, ICCV 2025 Highlight; official ComfyUI node |
-| 2 | FLUX Kontext | Edit without retraining | 12-32GB | Multi-round editing chains |
+| 2 | FLUX Kontext | Edit without retraining | 12GB+ (fp8) | Multi-round editing chains |
 | 3 | **PuLID Flux 2** | FLUX.2 family (Klein + Dev) | 24-40GB | **NEW Mar 2026**, auto model detection, WaveSpeed compat |
 | 4 | PuLID Flux II | FLUX.1 dual characters | 24-40GB | No model pollution |
 | 5 | InstantID | SDXL face swap (legacy) | 12GB | Maintenance mode since Apr 2025 |
