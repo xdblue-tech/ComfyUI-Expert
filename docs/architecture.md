@@ -1,133 +1,165 @@
-# VideoAgent Architecture
+# ComfyUI Expert Architecture
 
 ## Overview
 
-VideoAgent is a session-scoped AI orchestrator for ComfyUI-based video production. It activates only when launched via `video-agent.bat` - other Claude Code sessions are unaffected.
+ComfyUI Expert is a repository-local production system for agents that work with ComfyUI. `AGENTS.md` supplies the canonical operating instructions, and 15 AgentSkills provide task-specific procedures for character images, video, voice, LoRA training, assembly, publishing, and troubleshooting.
 
-## Core Design Decisions
+## Core design decisions
 
-1. **Session-scoped, not global** - Skills are local files read by Claude on demand via CLAUDE.md routing. Nothing gets installed to `~/.claude/skills/`.
-2. **CLAUDE.md is the orchestrator** - This is the only file Claude Code auto-loads from a project. It contains the decision tree, routing table, and behavioral instructions.
-3. **Skills are read-on-demand markdown** - No build step, no registration. Claude reads `skills/{name}/SKILL.md` when the routing table says to.
-4. **Polling over WebSocket** - Claude Code can't hold connections. REST polling every 5s works fine for minute-long video generation.
-5. **Research is user-triggered** - No cron. Session-start hook reminds when data is stale.
+1. **Repository-local instructions and skills** — project behavior lives in versioned files rather than global installation state.
+2. **Agent-agnostic discovery** — harnesses that auto-load `AGENTS.md` use it directly; others can be pointed at the same file and `skills/` directory.
+3. **Read skills on demand** — the agent reads `skills/{name}/SKILL.md` only after request routing selects it.
+4. **Inventory before workflows** — generated workflows must use models and nodes present in `state/inventory.json`.
+5. **Incremental context** — small foundation files are read first; project and reference material are loaded only when needed.
 
-## How It Loads
+## How it loads
 
-```
-video-agent.bat
+```text
+Agent opened at repository root
   |
-  |-- Writes state/session.json (project, ComfyUI URL)
-  |-- cd to VideoAgent directory
-  |-- Launches: claude
+  +-- reads AGENTS.md
+  |     |
+  |     +-- discovers .agents/skills -> ../skills when supported
+  |     +-- reads foundation guidance at session start
+  |     +-- routes a request to skills/{name}/SKILL.md
+  |
+  +-- python3 scripts/session.py
         |
-        |-- Claude Code reads CLAUDE.md (orchestrator instructions)
-        |-- .claude/settings.local.json hooks fire (staleness check)
-        |-- User's first message triggers foundation file reads
-        |-- Subsequent requests routed to skill files per routing table
+        +-- writes state/session.json
+        +-- reports ComfyUI, inventory, and research status
 ```
 
-## Dependency Graph
+See [compatibility.md](compatibility.md) for harness-specific discovery notes.
 
-```
-CLAUDE.md (orchestrator - always loaded)
-    |
-    |-- Foundation Skills (no dependencies)
-    |   |-- comfyui-api           REST API connection
-    |   |-- comfyui-inventory     Model/node discovery
-    |   |-- project-manager       Project state management
-    |
-    |-- Research (independent)
-    |   |-- comfyui-research      Self-updating knowledge
-    |
-    |-- Core Creation (depend on inventory)
-    |   |-- comfyui-prompt-engineer
-    |   |-- comfyui-workflow-builder
-    |   |-- comfyui-character-gen (global skill, wrapped with context)
-    |
-    |-- Production (depend on creation)
-    |   |-- comfyui-video-pipeline
-    |   |-- comfyui-voice-pipeline
-    |   |-- comfyui-lora-training
-    |
-    |-- Output (depend on production)
-    |   |-- video-assembly
-    |   |-- video-publisher
-    |
-    |-- Support
-        |-- comfyui-troubleshooter
-```
+## 3-tier context system
 
-## 3-Tier Context System
+### Tier 1: Foundation
 
-### Tier 1: Foundation (Session Start)
-
-Small files Claude reads on first interaction. <2,000 tokens total.
+Small files read at session start for current operating guidance.
 
 | File | Purpose |
-|------|---------|
-| `foundation/hardware-profile.md` | GPU, VRAM, launch flags |
-| `foundation/model-landscape.md` | Top 3 models per category |
-| `foundation/skill-registry.md` | Skill list + when to use each |
-| `foundation/api-quick-ref.md` | ComfyUI API cheat sheet |
+| --- | --- |
+| `foundation/hardware-profile.md` | GPU, VRAM, and launch guidance |
+| `foundation/model-landscape.md` | Current model choices by category |
+| `foundation/skill-registry.md` | Skill list and dependency map |
+| `foundation/api-quick-ref.md` | ComfyUI REST API reference |
 
-### Tier 2: Working (Per-Project)
+### Tier 2: Working
 
-Loaded when the user is working on a specific project.
-
-| File | Purpose |
-|------|---------|
-| `projects/{name}/manifest.yaml` | Settings, defaults, status |
-| `projects/{name}/characters/{char}/profile.yaml` | Appearance, voice, LoRA, history |
-| `projects/{name}/notes.md` | What worked, what didn't |
-
-### Tier 3: Reference (On-Demand)
-
-Large files. Only loaded when a skill explicitly needs them.
+Files read while working on an active project.
 
 | File | Purpose |
-|------|---------|
-| `references/models.md` | Full model specs + download links |
-| `references/workflows.md` | Complete workflow node configs |
-| `references/lora-training.md` | Training parameters |
+| --- | --- |
+| `projects/{name}/manifest.yaml` | Project settings, defaults, and status |
+| `projects/{name}/characters/{char}/profile.yaml` | Character appearance, voice, LoRA, and history |
+| `projects/{name}/notes.md` | Successful settings and production notes |
+
+### Tier 3: Reference
+
+Large files read only when the selected skill needs detailed material.
+
+| File | Purpose |
+| --- | --- |
+| `references/models.md` | Model specifications and download links |
+| `references/workflows.md` | Workflow node configurations |
+| `references/lora-training.md` | Training parameters and practices |
 | `references/voice-synthesis.md` | Voice tools in depth |
-| `references/prompt-templates.md` | Model-specific prompts |
-| `references/troubleshooting.md` | Error database |
-| `references/research-log.md` | Full technique survey (ongoing) |
+| `references/prompt-templates.md` | Model-specific prompt strategies |
+| `references/troubleshooting.md` | Error database and recovery guidance |
+| `references/research-log.md` | Technique survey and research history |
 
-## Skill Invocation Flow
+## Skill dependency graph
 
+```text
+AGENTS.md (canonical instructions)
+    |
+    +-- Discovery
+    |   +-- comfyui-prompt-interview
+    |
+    +-- Foundation skills (no dependencies)
+    |   +-- comfyui-api
+    |   +-- comfyui-inventory
+    |   +-- project-manager
+    |
+    +-- Research (independent)
+    |   +-- comfyui-research
+    |
+    +-- Core creation (depends on inventory)
+    |   +-- comfyui-prompt-engineer
+    |   +-- comfyui-workflow-builder
+    |   +-- comfyui-character-gen
+    |
+    +-- Production (depends on inventory and creation)
+    |   +-- comfyui-video-pipeline
+    |   +-- comfyui-video-production
+    |   +-- comfyui-voice-pipeline
+    |   +-- comfyui-lora-training
+    |
+    +-- Output (depends on production)
+    |   +-- video-assembly
+    |   +-- video-publisher
+    |
+    +-- Support
+        +-- comfyui-troubleshooter
 ```
+
+The authoritative current skill list is `foundation/skill-registry.md`.
+
+## Skill invocation flow
+
+```text
 User: "Generate a character portrait"
   |
-  CLAUDE.md routing table → "Read skills/comfyui-workflow-builder/SKILL.md"
+  +-- AGENTS.md routing table selects comfyui-workflow-builder
   |
-  Claude reads the skill file
+  +-- agent reads skills/comfyui-workflow-builder/SKILL.md
   |
-  Skill says: "Check state/inventory.json first"
+  +-- skill requires state/inventory.json
+  |     +-- missing or stale: run python3 scripts/scan_inventory.py
   |
-  Claude reads inventory
+  +-- agent validates models and node classes against inventory
   |
-  Skill says: "See references/workflows.md for node configs"
+  +-- skill requests reference material only when needed
   |
-  Claude reads the reference file
-  |
-  Claude generates the workflow JSON
-  |
-  Skill says: "Queue via comfyui-api"
-  |
-  Claude reads comfyui-api skill, executes the workflow
+  +-- agent produces or queues the validated workflow through comfyui-api
 ```
 
-## Global vs Local
+## Inventory
 
-| Scope | What | Why |
-|-------|------|-----|
-| **Global** (`~/.claude/skills/`) | `comfyui-character-gen` | Pre-existing skill, works standalone |
-| **Local** (this repo) | All 12 VideoAgent skills | Session-scoped, loaded via CLAUDE.md |
-| **Global** (`~/.claude/settings.json`) | Hooks, MCP servers | User's existing infrastructure |
-| **Local** (`.claude/settings.local.json`) | VideoAgent hooks, permissions | Only active in this directory |
+`python3 scripts/scan_inventory.py` writes `state/inventory.json`. The default `auto` mode queries a running ComfyUI API first and falls back to a local ComfyUI installation when one can be detected. Use `--mode online`, `--mode offline`, `--url URL`, `--comfyui-path PATH`, and `--output PATH` when needed.
 
-## deploy.ps1
+The inventory schema is:
 
-Does NOT deploy skills globally. Only syncs reference file updates to the global `comfyui-character-gen` skill so it benefits from research findings.
+```json
+{
+  "last_updated": "2026-09-12T18:00:00+00:00",
+  "mode": "online",
+  "comfyui_version": "0.33.1",
+  "comfyui_path": "/home/user/ComfyUI",
+  "comfyui_url": "http://127.0.0.1:8188",
+  "system": {
+    "gpu": "cuda:0 NVIDIA GeForce RTX 5070 Ti",
+    "vram_total_gb": 16.7,
+    "vram_free_gb": 15.5
+  },
+  "models": {
+    "checkpoints": ["a.safetensors"],
+    "loras": []
+  },
+  "custom_nodes": ["SomeNode"],
+  "node_classes": ["KSampler"]
+}
+```
+
+`node_classes` is populated only by an online scan, and `custom_nodes` is populated only by an offline scan; both default to empty lists. The scanner supplies the complete supported model-category map under `models`, so agents should use the actual cached keys rather than assume only the example categories.
+
+`python3 scripts/session.py` writes `state/session.json` and prints a summary containing the selected ComfyUI URL, active project, ComfyUI reachability and GPU details when available, inventory timestamp/model count/mode, and research-staleness guidance. It accepts `--project NAME` and `--comfyui-url URL`.
+
+## Global vs local
+
+| Scope | Contents | Setup |
+| --- | --- | --- |
+| Repository local | `AGENTS.md`, `skills/`, `foundation/`, `references/`, project state, and scripts | Open an agent at the repository root. |
+| Harness configuration | Optional discovery pointers to the repository-local files | Point the harness at `AGENTS.md` and `skills/`; do not copy behavior into global agent state unless that harness requires it. |
+
+The skills remain repository-local. pi discovers them through `.agents/skills -> ../skills`; compatible harnesses may use their own optional symlink or on-demand file reads while consuming the same source files.

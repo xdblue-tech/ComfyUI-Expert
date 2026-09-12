@@ -1,109 +1,54 @@
-# Getting Started with VideoAgent
+# Getting Started
 
 ## Prerequisites
 
-- **Claude Code** installed and configured
-- **ComfyUI** installed (local or remote)
-- **FFmpeg** installed (for video assembly)
-- **PowerShell 7+** (for utility scripts)
+- Any [AgentSkills](https://agentskills.io)-compatible agent that can read this repository.
+- Python 3.9 or newer.
+- ComfyUI running locally or at a reachable remote URL.
+- [FFmpeg](https://ffmpeg.org/) is optional and needed only for local video assembly.
 
-## How It Works
+## Quick start
 
-VideoAgent is **session-scoped** - it only activates when you launch via the bat file. Your other Claude Code sessions are unaffected.
-
-When you run `video-agent.bat`:
-1. Claude Code opens in the VideoAgent directory
-2. `CLAUDE.md` loads automatically, turning Claude into the VideoAgent orchestrator
-3. Project-local hooks fire (staleness check)
-4. Claude reads foundation files on first interaction and routes your requests to the right skill
-
-Skills live as local files in `skills/`. They're NOT installed globally. Claude reads them on demand based on what you ask.
-
-## Quick Start
-
-### 1. Launch a Session
-
-Double-click `video-agent.bat` or run from terminal:
-
-```cmd
-video-agent.bat
+```bash
+cd ComfyUI-Expert
+python3 scripts/session.py                 # bootstrap + status
+python3 scripts/scan_inventory.py          # first run / after installing models
+# now open your agent in this directory and ask for what you want
 ```
 
-With options:
-```cmd
-video-agent.bat --project "my-video"
-video-agent.bat --comfyui "http://<remote-ip>:8188"
-video-agent.bat --resume
+`session.py` accepts `--project NAME` to set an active project and `--comfyui-url URL` to check a non-default ComfyUI endpoint. `scan_inventory.py` tries the configured ComfyUI URL first, then can scan an on-disk installation when given `--comfyui-path PATH`.
+
+## Example prompts
+
+```text
+Create a project called "Character Showcase" and add a character named Sage.
+Generate a photorealistic portrait of Sage using an installed identity method.
+Create a talking-head video from this character image and this script.
+Train a LoRA from these reference images.
+Research the latest ComfyUI video models.
 ```
 
-### 2. Scan Your ComfyUI Installation
-
-First time only (or after installing new models):
-
-```
-Scan my ComfyUI installation at C:\ComfyUI
-```
-
-Or manually:
-```powershell
-pwsh -File scripts/scan-inventory.ps1 -ComfyUIPath "C:\ComfyUI"
-```
-
-### 3. Start Creating
-
-```
-Generate a photorealistic portrait using FLUX
-Create a talking head video of my character
-Train a LoRA from these reference images
-Research the latest ComfyUI video models
-```
-
-## Example Workflows
-
-### Character Image Generation
-1. "Create a new project called Character Showcase"
-2. "Add a character named Sage - auburn hair, green eyes, freckles"
-3. "Generate a photorealistic portrait of Sage using InstantID"
-4. Agent reads inventory → workflow-builder skill → prompt-engineer skill → generates workflow → executes via API
-
-### Talking Head Video
-1. "Make Sage say 'Hello everyone, welcome to my channel'"
-2. Agent orchestrates: voice pipeline → video pipeline → lip-sync → assembly
-
-### Research Updates
-1. "Check for new ComfyUI models and techniques"
-2. Agent reads research skill → checks YouTube/GitHub/HuggingFace → updates references
-
-## Syncing References
-
-If you want the global `comfyui-character-gen` skill to benefit from VideoAgent's reference updates:
-
-```powershell
-pwsh -File scripts/deploy.ps1
-```
-
-This only syncs reference files - it does NOT install VideoAgent skills globally.
-
-## File Locations
+## File locations
 
 | What | Where |
-|------|-------|
-| Launcher | `video-agent.bat` (repo root) |
-| Orchestrator | `CLAUDE.md` (loaded automatically) |
-| Skills | `skills/` (read on demand by Claude) |
-| Foundation context | `foundation/` (read at session start) |
-| Deep references | `references/` (read when skills need detail) |
-| Projects | `projects/` (per-project state) |
+| --- | --- |
+| Canonical instructions | `AGENTS.md` |
+| Claude Code compatibility pointer | `CLAUDE.md` |
+| Skill discovery symlink | `.agents/skills` → `../skills` |
+| Skills | `skills/*/SKILL.md` |
+| Foundation context | `foundation/` |
+| Deep references | `references/` |
+| Project state | `projects/` |
 | Inventory cache | `state/inventory.json` |
-| Session config | `state/session.json` (written by bat file) |
-| Utility scripts | `scripts/` |
+| Session metadata | `state/session.json` |
+| Python scripts | `scripts/scan_inventory.py`, `scripts/session.py` |
 
 ## Troubleshooting
 
-| Issue | Solution |
-|-------|---------|
-| Claude doesn't act as VideoAgent | Make sure you launched via `video-agent.bat`, not plain `claude` |
-| Staleness hook not firing | Check `.claude/settings.local.json` has the hook configured |
-| ComfyUI won't connect | Run `scripts/connect-comfyui.ps1` to diagnose |
-| Missing models in workflow | Run inventory scan, then ask Claude to re-generate |
-| Skills polluting other sessions | They shouldn't - skills are local files, not globally installed |
+| Issue | Action |
+| --- | --- |
+| ComfyUI is unreachable | Start ComfyUI, or run `python3 scripts/session.py --comfyui-url http://host:8188`. |
+| Inventory scan cannot find ComfyUI | Pass `--comfyui-path PATH`, set `COMFYUI_PATH`, or start the server for an online scan. |
+| Skills are not visible to pi | From the repository root, run `ls .agents/skills` and confirm it resolves to `../skills`. |
+| Research guidance is stale | Read `references/staleness-report.md`, then ask the agent to research current ComfyUI updates. |
+| A workflow names a missing model or node | Run `python3 scripts/scan_inventory.py` after installation, then ask the agent to rebuild the workflow. |

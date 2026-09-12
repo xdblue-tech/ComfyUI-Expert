@@ -1,508 +1,103 @@
-# VideoAgent - ComfyUI Video Production Orchestrator
+# ComfyUI Expert
 
-A session-scoped AI orchestrator for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) that turns Claude into a senior video production technical director. It routes natural-language requests to 13 specialized skill modules covering the full pipeline: character image generation, video production, voice synthesis, LoRA training, and publishing -- all driven by [ComfyUI](https://github.com/comfyanonymous/ComfyUI).
+## What this is
 
-## Why This Exists
+ComfyUI Expert is a repository-local AI production assistant for [ComfyUI](https://github.com/comfyanonymous/ComfyUI). Its instructions and 15 [AgentSkills](https://agentskills.io)-compatible skills help an agent plan and validate character images, video, voice, LoRA training, assembly, and publishing work.
 
-Producing AI-generated video with ComfyUI involves juggling dozens of models, custom nodes, prompt styles, and hardware constraints. VideoAgent wraps all of that domain knowledge into a structured skill system that Claude reads on demand, so you can say things like:
+## Why
 
-- _"Generate a photorealistic portrait of a dog using InstantID"_
-- _"Make a talking head video where she says 'Welcome to my channel'"_
-- _"Train a LoRA from these 20 reference images"_
-- _"Check for new ComfyUI video models released this month"_
+ComfyUI video production combines models, custom nodes, prompts, hardware limits, and project state. ComfyUI Expert keeps that operating knowledge in versioned files, so you can ask for a production outcome instead of memorizing node names or VRAM budgets. The agent checks the installed inventory before proposing a workflow and reads detailed reference material only when the selected skill needs it.
 
-...and get validated, hardware-aware ComfyUI workflows without memorizing node names or VRAM budgets.
+## How it works
 
-## How It Works
+- `AGENTS.md` is the canonical repository-root instruction file; `CLAUDE.md` points compatible Claude Code sessions to it.
+- The `.agents/skills` symlink exposes the repository's `skills/` directory to pi, while other harnesses can read the same skill files on demand.
+- `python3 scripts/session.py` writes session state and prints ComfyUI, inventory, and research-freshness status.
+- `python3 scripts/scan_inventory.py` records installed models, custom nodes, and online node classes in `state/inventory.json`.
+- The agent reads the matching `SKILL.md`, validates required models and nodes against the inventory, then follows that skill's production workflow.
 
-```
-video-agent.bat
-  |
-  |-- Writes state/session.json (active project, ComfyUI URL)
-  |-- cd to this repo
-  |-- Launches: claude
-        |
-        |-- Claude Code auto-loads CLAUDE.md (the orchestrator)
-        |-- Local hooks fire (staleness check)
-        |-- User's first message triggers foundation reads
-        |-- Each request is routed to the right skill file
-```
+## Requirements
 
-**Key design decisions:**
+- An AgentSkills-compatible agent that can read repository files.
+- Python 3.9 or newer for the included scripts.
+- A running local or remote ComfyUI instance for online scanning and workflow execution.
+- [FFmpeg](https://ffmpeg.org/) is optional, but needed for local video assembly tasks.
 
-| Decision | Rationale |
-|----------|-----------|
-| Session-scoped, not global | Skills stay in this repo. Other Claude Code sessions are unaffected. |
-| `CLAUDE.md` is the orchestrator | The only file Claude auto-loads from a project root. Contains the routing table and behavioral instructions. |
-| Skills are read-on-demand markdown | No build step, no registration. Claude reads `skills/{name}/SKILL.md` when the routing table says to. |
-| REST polling over WebSocket | Claude Code can't hold persistent connections. Polling every 5s works fine for minute-long video generation. |
-| Research is user-triggered | No cron jobs. A session-start hook reminds you when data is stale. |
+> **Current hardware profile:** The checked-in guidance targets Linux with an NVIDIA GeForce RTX 5070 Ti reporting 16.7 GB VRAM. Read `foundation/hardware-profile.md` for current capability guidance.
 
-## Prerequisites
+## Quick start
 
-- **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** installed and authenticated
-- **[ComfyUI](https://github.com/comfyanonymous/ComfyUI)** installed (local or remote)
-- **[FFmpeg](https://ffmpeg.org/)** on PATH (for video assembly)
-- **[PowerShell 7+](https://github.com/PowerShell/PowerShell)** (for utility scripts)
-- Windows (the launcher is a `.bat` file; WSL/Linux adaptation is straightforward)
-
-## Quick Start
-
-### 1. Clone and launch
-
-```cmd
-git clone https://github.com/MCKRUZ/ComfyUI-Expert.git
+```bash
 cd ComfyUI-Expert
-video-agent.bat
+python3 scripts/session.py                 # bootstrap + status
+python3 scripts/scan_inventory.py          # first run / after installing models
+# now open your agent in this directory and ask for what you want
 ```
 
-With options:
+Example prompts:
 
-```cmd
-video-agent.bat --project "my-video"          # Set active project
-video-agent.bat --comfyui "http://<remote-ip>:8188"  # Remote ComfyUI
-video-agent.bat --resume                       # Resume last session
+```text
+Create a project called "Character Showcase" and add a character named Sage.
+Generate a photorealistic portrait of Sage with identity preservation.
+Create a short talking-head video from this character image and script.
+Scan my ComfyUI installation, then build a workflow using only installed models.
+Research current ComfyUI video models and update the reference notes.
 ```
 
-### 2. Scan your ComfyUI installation
+## The 15 skills
 
-First time (or after installing new models/nodes), tell the agent:
+| Skill | Use it for |
+| --- | --- |
+| `comfyui-api` | Connect to ComfyUI, queue workflows, monitor execution, and retrieve results. |
+| `comfyui-character-gen` | Build identity-preserving character-generation workflows and pipelines. |
+| `comfyui-inventory` | Scan installed models, offline custom nodes, and online node classes with `scripts/scan_inventory.py`; cache the result in `state/inventory.json`. |
+| `comfyui-lora-training` | Prepare datasets and configure character-consistency LoRA training. |
+| `comfyui-prompt-engineer` | Craft model-specific prompts for the selected checkpoint and identity method. |
+| `comfyui-prompt-interview` | Turn a creative idea into a complete image-generation brief through guided questions. |
+| `comfyui-research` | Research ComfyUI models and techniques, update references, and flag stale information. |
+| `comfyui-troubleshooter` | Diagnose ComfyUI server, workflow, quality, and performance failures. |
+| `comfyui-video-pipeline` | Generate image-to-video, text-to-video, talking-head, and motion-controlled video workflows. |
+| `comfyui-video-production` | Plan and orchestrate validated multi-shot ComfyUI video-production pipelines. |
+| `comfyui-voice-pipeline` | Generate speech, clone voices, and plan lip-sync workflows. |
+| `comfyui-workflow-builder` | Build validated ComfyUI workflow JSON from natural-language requirements. |
+| `project-manager` | Manage project manifests, character profiles, workflow history, and assets. |
+| `video-assembly` | Assemble generated clips, audio, titles, transitions, and exports with FFmpeg or Remotion. |
+| `video-publisher` | Prepare completed videos for YouTube and other publishing targets. |
 
-```
-Scan my ComfyUI installation at C:\ComfyUI
-```
+## Scripts
 
-Or run the script directly:
+- `scripts/scan_inventory.py` scans a running or on-disk ComfyUI installation and writes the inventory cache.
+- `scripts/session.py` writes session metadata and reports ComfyUI connectivity, inventory freshness, and research status.
 
-```powershell
-pwsh -File scripts/scan-inventory.ps1 -ComfyUIPath "C:\ComfyUI"
-```
+## Repo layout
 
-This creates `state/inventory.json` -- a cache of every model, custom node, and VRAM detail. The agent validates every workflow against this inventory before execution.
-
-### 3. Start creating
-
-```
-Generate a photorealistic portrait using FLUX
-Create a new project called "Character Showcase"
-Add a character named Spot - German Shepard, shaggy hair, dark fur
-Train a LoRA from these reference images
-Research the latest ComfyUI video models
-```
-
-## Architecture
-
-### 3-Tier Context System
-
-VideoAgent loads context incrementally to stay within Claude's context window:
-
-| Tier | Files | Loaded When | Size |
-|------|-------|-------------|------|
-| **1: Foundation** | `foundation/*.md` | Session start (first interaction) | ~2K tokens |
-| **2: Working** | `projects/{name}/*` | When working on a specific project | Varies |
-| **3: Reference** | `references/*.md` | Only when a skill explicitly needs detail | Large |
-
-### Skill Dependency Graph
-
-```
-CLAUDE.md (orchestrator - always loaded)
-    |
-    |-- Discovery (no dependencies)
-    |   |-- comfyui-prompt-interview Vision clarification via conversation
-    |
-    |-- Foundation Skills (no dependencies)
-    |   |-- comfyui-api              REST API connection
-    |   |-- comfyui-inventory        Model/node discovery
-    |   |-- project-manager          Project & character state
-    |
-    |-- Research (independent)
-    |   |-- comfyui-research         Self-updating knowledge base
-    |
-    |-- Core Creation (depend on inventory)
-    |   |-- comfyui-prompt-engineer  Model-specific prompt optimization
-    |   |-- comfyui-workflow-builder Validated workflow JSON generation
-    |
-    |-- Production (depend on creation)
-    |   |-- comfyui-video-pipeline   Wan 2.6 / LTX-2.3 / FramePack / AnimateDiff
-    |   |-- comfyui-voice-pipeline   Qwen3-TTS / Chatterbox / F5-TTS / lip-sync
-    |   |-- comfyui-lora-training    Dataset prep, training, evaluation
-    |
-    |-- Output (depend on production)
-    |   |-- video-assembly           FFmpeg + Remotion composition
-    |   |-- video-publisher          YouTube metadata & upload
-    |
-    |-- Support
-        |-- comfyui-troubleshooter   Error diagnosis & fixes
-```
-
-### Request Routing
-
-When you make a request, `CLAUDE.md` routes it to the right skill:
-
-| You Say | Skill Loaded | What Happens |
-|---------|-------------|--------------|
-| "I have an idea for..." / vague concept | `comfyui-prompt-interview` | Guided conversation to clarify vision before generation |
-| "Generate a character portrait" | `comfyui-workflow-builder` | Checks inventory, builds workflow JSON, queues via API |
-| "Craft a better prompt" | `comfyui-prompt-engineer` | Model-specific optimization (FLUX vs SDXL vs Wan) |
-| "Create a video from this image" | `comfyui-video-pipeline` | Selects engine (Wan 2.6/FramePack/LTX-2.3), builds pipeline |
-| "Clone this voice / make her talk" | `comfyui-voice-pipeline` | Voice synthesis + lip-sync pipeline |
-| "Train a LoRA" | `comfyui-lora-training` | Dataset prep, training config, checkpoint evaluation |
-| "Build a raw workflow" | `comfyui-workflow-builder` | Direct workflow construction with inventory validation |
-| "Check for new models" | `comfyui-research` | Scans YouTube/GitHub/HuggingFace, updates references |
-| "Something broke" | `comfyui-troubleshooter` | Error pattern matching, fix suggestions |
-| "Assemble the final video" | `video-assembly` | FFmpeg or Remotion-based composition |
-| "Upload to YouTube" | `video-publisher` | Metadata generation + upload delegation |
-| "Create a new project" | `project-manager` | Project manifests, character profiles |
-| "Connect to ComfyUI" | `comfyui-api` | Connection test, system info |
-
-## The 13 Skills
-
-### Discovery
-
-**comfyui-prompt-interview** -- Guides you through a structured conversation before generating anything. Asks about subject, mood, style, setting, and intended use to produce a complete creative brief. Particularly useful for vague or high-level ideas ("I want something dramatic and cinematic"). Outputs a prompt-ready specification that feeds directly into `comfyui-prompt-engineer` or `comfyui-workflow-builder`.
-
-### Foundation
-
-**comfyui-api** -- Connects to ComfyUI's REST API (default `http://127.0.0.1:8188`). Queues workflows, polls for results at 5-second intervals, handles image/model uploads, cancellations, and VRAM management. Supports online mode (live API) and offline mode (JSON export).
-
-**comfyui-inventory** -- Discovers every installed model, custom node, and VRAM configuration. Works online (API queries) or offline (directory scanning via `scan-inventory.ps1`). Caches results to `state/inventory.json`. Maps node classes to packages (e.g., `ApplyInstantID` -> `ComfyUI_InstantID`).
-
-**project-manager** -- Creates project structures with YAML manifests and character profiles. Tracks generation history (what settings worked), manages character identity (appearance, voice, LoRA, reference images), and updates defaults after successful runs.
-
-### Research
-
-**comfyui-research** -- Monitors 7 YouTube channels, 11 GitHub repos, and HuggingFace trending models. Extracts knowledge from tutorials (via transcript analysis), tracks releases, and generates staleness reports. Models older than 90 days and nodes older than 60 days get flagged.
-
-### Core Creation
-
-**comfyui-prompt-engineer** -- Model-specific prompt optimization for FLUX, SDXL, SD1.5, and Wan. Adjusts prompts for identity methods (InstantID, PuLID, IP-Adapter, LoRA), recommends CFG scales per model, and provides negative prompt templates. Integrates with character profiles for context.
-
-**comfyui-workflow-builder** -- Generates ComfyUI workflow JSON from natural language. Validates every model and node against inventory before output. Supports text-to-image, identity-preserved generation, video (Wan/AnimateDiff), upscaling, and inpainting patterns. Includes VRAM estimation per component.
-
-### Production
-
-**comfyui-video-pipeline** -- Orchestrates video engines based on requirements:
-- **LTX-2.3**: 4K production quality, audio+video, GGUF-quantized options
-- **Wan 2.6**: 1080p reference-to-video, native audio generation, built-in lip-sync
-- **Wan 2.2 MoE 14B**: Film-level quality, first+last frame control, 24GB+ VRAM
-- **FramePack**: Long videos (60+ sec), VRAM-invariant (works on 6GB)
-- **HunyuanVideo 1.5**: Lightweight quality alternative at 8.3B params
-- **AnimateDiff V3**: Fast iteration, motion LoRAs, 4-8 step Lightning
-
-Includes post-processing (RIFE frame interpolation, face enhancement, deflicker, color correction) and a dedicated talking-head pipeline.
-
-**comfyui-voice-pipeline** -- Seven voice synthesis tools (Qwen3-TTS, Chatterbox Turbo, F5-TTS, TTS Audio Suite, IndexTTS-2, RVC, ElevenLabs) and four lip-sync methods (Wav2Lip, SadTalker, LivePortrait, LatentSync 1.6). Three complete pipelines: Quick (image-to-talk), Quality (image-to-video-to-lip-sync), and Premium (expression transfer). Wan 2.6 now also supports native lip-sync as a fifth path.
-
-**comfyui-lora-training** -- Training tools (AI-Toolkit for FLUX, Kohya_ss for SDXL, FluxGym/SimpleTuner for low VRAM). Covers dataset preparation (15-30 images, captioning strategy), hyperparameter guidance, checkpoint evaluation, and LoRA + zero-shot method combination.
-
-### Output
-
-**video-assembly** -- Two modes: FFmpeg (concatenation, audio mixing, subtitles, transitions) and Remotion (animated captions, motion graphics, React-based templates). Audio normalization to -16 LUFS for YouTube. Quality presets (CRF 15-28).
-
-**video-publisher** -- Thin orchestrator that delegates to global YouTube skills for research, title/thumbnail optimization, upload, and analytics. Generates platform-specific metadata (YouTube, Shorts, Instagram Reels, TikTok).
-
-### Support
-
-**comfyui-troubleshooter** -- Diagnoses four error categories (server, workflow, quality, performance). Covers the top 10 common errors (OOM, missing nodes, precision mismatch, burned faces, etc.) with quick fixes. Includes a quality decision tree and missing-dependency resolution.
-
-## Model Landscape
-
-The agent tracks the top models across five categories:
-
-### Image Generation
-| Model | Best For | VRAM |
-|-------|----------|------|
-| FLUX.2 [dev] | Photorealism, 4MP, multi-reference (up to 10 images) | 24GB+ |
-| FLUX.2 [klein] | Fast generation, low VRAM (4B/9B distilled) | 12-20GB+ |
-| FLUX Kontext | Iterative character editing | 12GB+ (fp8) |
-| Qwen-Image 2.0 | Typography, 2K resolution, layered editing | 24GB+ |
-| Z-Image | Non-distilled quality (Base) / fast (Turbo, 8 steps) | 12-16GB+ |
-
-### Identity Preservation
-| Method | Best For | VRAM |
-|--------|----------|------|
-| InfiniteYou | Highest identity fidelity | 24GB |
-| FLUX Kontext | Edit without retraining | 12GB+ (fp8) |
-| PuLID Flux 2 | FLUX.2 family (Klein + Dev) | 24-40GB |
-| PuLID Flux II | FLUX.1 dual characters, no pollution | 24-40GB |
-
-### Video Generation
-| Model | Best For | VRAM |
-|-------|----------|------|
-| LTX-2.3 | 4K audio+video, portrait mode, production | 24GB+ |
-| Wan 2.6 | Reference-to-video, lip-sync, native audio gen, 1080p | 24GB+ |
-| Wan 2.2 MoE | Film-level quality, first+last frame control | 24GB+ |
-| HunyuanVideo 1.5 | Lightweight flagship quality (8.3B params) | 24GB |
-| FramePack | Long videos (60s+), VRAM-invariant | 6GB+ |
-| SkyReels V1 | Human-centric, 33 expressions, cinematic | 24GB+ |
-| AnimateDiff V3 | Fast iteration, motion LoRAs | 8GB+ |
-
-### Voice / TTS
-| Tool | Best For | License |
-|------|----------|---------|
-| TTS Audio Suite | Unified 11-engine platform, 23 languages | Multi |
-| Qwen3-TTS | 10 languages, zero-shot clone, voice design | Open |
-| Chatterbox Turbo | Emotion tags, sub-200ms latency | MIT |
-| IndexTTS-2 | 8-emotion vector control via sliders | Open |
-| F5-TTS | Zero-shot cloning, works on 6GB VRAM | MIT |
-
-### Lip-Sync
-| Tool | Best For |
-|------|----------|
-| LatentSync 1.6 | Highest accuracy (ByteDance) |
-| Wan 2.6 native | Reference-to-video with built-in lip-sync |
-| Wav2Lip | Proven, works with any face |
-| SadTalker | Head movement + expressions |
-
-Full specs and download links are in `references/models.md`.
-
-## Hardware Profile
-
-Configured for an **RTX 5070 Ti (16.7 GB VRAM)**, verified against the running ComfyUI instance. The agent adjusts recommendations based on available VRAM.
-
-| Task class | 16.7 GB verdict |
-|------------|-----------------|
-| SDXL / Pony / Illustrious checkpoints | Full quality, no offload |
-| Flux dev (fp8 or GGUF Q8) | Viable, expect offload with large batches |
-| SD1.5 / SDXL ControlNet stacks | Viable |
-| LoRA training (SDXL) | Viable with small batch + gradient checkpointing |
-| 14B-class video models (Wan etc.) | Not installed; only GGUF quantized + offload, slow |
-| Simultaneous video + upscaler pipelines | Avoid; run sequentially |
-
-Recommended ComfyUI launch flags: default flags (`python main.py --listen`). Do not use `--highvram`; `--fp8_e4m3fn-unet` is optional for Flux. Full guidance: `foundation/hardware-profile.md`.
-
-## Project Structure
-
-```
+```text
 ComfyUI-Expert/
-|-- video-agent.bat              Launcher (writes session config, opens Claude)
-|-- CLAUDE.md                    Orchestrator (routing table, behavior, rules)
-|-- .claude/
-|   +-- settings.local.json     Project-local hooks & permissions
-|
-|-- foundation/                  Tier 1: Quick reference (~2K tokens)
-|   |-- agent-persona.md         Communication style & principles
-|   |-- api-quick-ref.md         ComfyUI REST API cheat sheet
-|   |-- hardware-profile.md      GPU specs, VRAM capabilities
-|   |-- model-landscape.md       Top 3 models per category
-|   +-- skill-registry.md        Skill list & dependency map
-|
-|-- skills/                      13 skill modules (read on demand)
-|   |-- comfyui-api/
-|   |-- comfyui-inventory/
-|   |-- comfyui-lora-training/
-|   |-- comfyui-prompt-engineer/
-|   |-- comfyui-prompt-interview/
-|   |-- comfyui-research/
-|   |-- comfyui-troubleshooter/
-|   |-- comfyui-video-pipeline/
-|   |-- comfyui-voice-pipeline/
-|   |-- comfyui-workflow-builder/
-|   |-- project-manager/
-|   |-- video-assembly/
-|   +-- video-publisher/
-|
-|-- references/                  Tier 3: Deep reference (loaded on demand)
-|   |-- models.md                Full model catalog & download links
-|   |-- workflows.md             Complete workflow node configurations
-|   |-- lora-training.md         Training parameters & best practices
-|   |-- voice-synthesis.md       Voice tools in depth
-|   |-- prompt-templates.md      Model-specific prompt strategies
-|   |-- troubleshooting.md       Error database with solutions
-|   |-- research-log.md          Full technique survey (ongoing, replaces research-2025.md)
-|   |-- staleness-report.md      Freshness tracking for all entries
-|   +-- evolution.md             Update protocol & changelog
-|
-|-- projects/                    Per-project state (gitignored)
-|-- state/                       Runtime state (gitignored)
-|   |-- session.json             Active project & ComfyUI URL
-|   +-- inventory.json           Cached models/nodes from scan
-|
-|-- scripts/                     Utility scripts
-|   |-- scan-inventory.ps1       Offline ComfyUI directory scanner
-|   |-- connect-comfyui.ps1      Connection test & diagnostics
-|   |-- staleness-check.ps1      Session-start hook (checks research age)
-|   |-- deploy.ps1               Sync references to global skill
-|   +-- sync-skills.ps1          Sync all skills to global Claude skills directory
-|
-|-- agent/
-|   +-- AGENT.md                 Extended orchestration spec
-|
-|-- openclaw/                    OpenClaw compatibility layer
-|   |-- AGENTS.md                Orchestration rules (CLAUDE.md equivalent)
-|   |-- SOUL.md                  Agent persona
-|   |-- TOOLS.md                 Available tools & API reference
-|   |-- setup.ps1                Install skills into OpenClaw workspace
-|   +-- openclaw.example.json    Config template
-|
-+-- docs/
-    |-- architecture.md          System design decisions
-    +-- getting-started.md       Quick start guide
+|-- .agents/skills -> ../skills  Skill discovery symlink
+|-- AGENTS.md                    Canonical agent instructions
+|-- CLAUDE.md                    Pointer to AGENTS.md
+|-- README.md
+|-- docs/
+|   |-- architecture.md
+|   |-- compatibility.md
+|   |-- getting-started.md
+|   +-- plans/
+|-- foundation/                  Tier 1 guidance
+|-- projects/                    Per-project manifests and assets
+|-- references/                  Deep reference material
+|-- scripts/
+|   |-- scan_inventory.py
+|   +-- session.py
+|-- skills/                      15 AgentSkills
+|-- state/                       Runtime state; contents are gitignored
++-- tests/
+    |-- test_scan_inventory.py
+    +-- test_session.py
 ```
 
-## Example Workflows
+## Compatibility
 
-### Character Image Generation
-
-```
-1. "Create a new project called Character Showcase"
-2. "Add a character named Sage - auburn hair, green eyes, freckles"
-3. "Generate a photorealistic portrait of Sage using InstantID"
-```
-
-The agent: reads inventory -> loads workflow-builder skill -> loads prompt-engineer skill -> generates optimized prompt -> builds validated workflow JSON -> queues via ComfyUI API -> polls for result.
-
-### Talking Head Video
-
-```
-1. "Make Sage say 'Hello everyone, welcome to my channel'"
-```
-
-The agent orchestrates a multi-step pipeline: voice synthesis (Chatterbox/F5-TTS) -> video generation (Wan 2.2) -> lip-sync (LatentSync) -> face enhancement -> assembly.
-
-### Research Update
-
-```
-1. "Check for new ComfyUI models and techniques"
-```
-
-The agent: loads research skill -> checks YouTube channels, GitHub repos, HuggingFace trending -> extracts knowledge from tutorials -> updates reference files -> generates staleness report.
-
-## Hooks & Automation
-
-VideoAgent uses Claude Code's [hooks system](https://docs.anthropic.com/en/docs/claude-code/hooks) for lightweight automation:
-
-| Hook | Event | What It Does |
-|------|-------|-------------|
-| Staleness check | `SessionStart` | Warns if research data is older than 2 weeks |
-
-Configured in `.claude/settings.local.json` (project-local, doesn't affect other sessions).
-
-## Scripts Reference
-
-| Script | Purpose | Usage |
-|--------|---------|-------|
-| `scan-inventory.ps1` | Scan ComfyUI models & nodes offline | `pwsh -File scripts/scan-inventory.ps1 -ComfyUIPath "C:\ComfyUI"` |
-| `connect-comfyui.ps1` | Test ComfyUI connection & show diagnostics | `pwsh -File scripts/connect-comfyui.ps1` |
-| `staleness-check.ps1` | Check research freshness (session hook) | Runs automatically at session start |
-| `deploy.ps1` | Sync references to global `comfyui-character-gen` skill | `pwsh -File scripts/deploy.ps1` |
-| `sync-skills.ps1` | Sync all skill files to global Claude skills directory | `pwsh -File scripts/sync-skills.ps1` |
-
-## Customization
-
-### Different GPU
-
-Edit `foundation/hardware-profile.md` with your GPU specs. The agent reads this at session start and adjusts VRAM recommendations accordingly.
-
-### Different ComfyUI location
-
-Pass it at launch:
-
-```cmd
-video-agent.bat --comfyui "http://<remote-ip>:8188"
-```
-
-Or edit the default in `video-agent.bat` (line 18).
-
-### Adding models to the landscape
-
-Edit `foundation/model-landscape.md` (top 3 quick reference) and `references/models.md` (full catalog). Or just ask the agent to run a research update.
-
-### Adapting for Linux/macOS
-
-Replace `video-agent.bat` with a shell script that:
-1. Writes `state/session.json`
-2. `cd`s to the repo
-3. Runs `claude`
-
-Update the PowerShell script paths in `.claude/settings.local.json` to use `pwsh` (which is cross-platform).
-
-## Troubleshooting
-
-| Issue | Solution |
-|-------|---------|
-| Claude doesn't act as VideoAgent | Launch via `video-agent.bat`, not plain `claude` |
-| "Model not found" in workflow | Run inventory scan, then ask to regenerate |
-| ComfyUI won't connect | Run `pwsh -File scripts/connect-comfyui.ps1` |
-| Staleness hook not firing | Check `.claude/settings.local.json` is valid JSON |
-| Skills leaking to other sessions | They shouldn't -- skills are local files, not globally installed |
-
-## OpenClaw Compatibility
-
-VideoAgent skills also work with [OpenClaw](https://github.com/openclaw/openclaw). Both platforms follow the [AgentSkills specification](https://agentskills.io), so the skill files are cross-compatible. The `openclaw/` directory contains everything needed.
-
-### How it maps
-
-| Claude Code | OpenClaw Equivalent | Notes |
-|-------------|--------------------|----|
-| `CLAUDE.md` (orchestrator) | `AGENTS.md` + `SOUL.md` + `TOOLS.md` | Split across three workspace files |
-| `video-agent.bat` (launcher) | OpenClaw daemon | OpenClaw runs as a persistent service |
-| `.claude/settings.local.json` (hooks) | `openclaw.json` (config) | Different config format |
-| Auto-loads from project root | Skills in `~/.openclaw/workspace/skills/` | Must be installed to workspace |
-| `{skill}/SKILL.md` frontmatter | Same + `metadata.openclaw` block | Already added to all 12 skills |
-
-### Setup
-
-```powershell
-# 1. Run the setup script (copies skills + workspace files into OpenClaw)
-pwsh -File openclaw/setup.ps1
-
-# Or use symlinks to keep them in sync with the repo
-pwsh -File openclaw/setup.ps1 -Symlink
-
-# Or specify a custom OpenClaw workspace path
-pwsh -File openclaw/setup.ps1 -OpenClawDir "~/.openclaw/workspace"
-```
-
-```powershell
-# 2. Add skill config to your ~/.openclaw/openclaw.json
-# See openclaw/openclaw.example.json for the full template -- at minimum:
-```
-
-```json
-{
-  "skills": {
-    "entries": {
-      "comfyui-api": {
-        "enabled": true,
-        "env": { "COMFYUI_URL": "http://127.0.0.1:8188" }
-      },
-      "comfyui-inventory": {
-        "enabled": true,
-        "env": { "COMFYUI_PATH": "C:\\ComfyUI" }
-      }
-    }
-  }
-}
-```
-
-```powershell
-# 3. Restart OpenClaw to pick up the new skills
-```
-
-### What the setup script does
-
-1. Copies (or symlinks) all 12 skill folders into `~/.openclaw/workspace/skills/`
-2. Copies `AGENTS.md`, `SOUL.md`, `TOOLS.md` into the workspace root
-3. Copies `foundation/` and `references/` alongside skills for reference access
-
-### What's different in OpenClaw
-
-- **Skill routing**: Claude Code uses a routing table in `CLAUDE.md`. OpenClaw uses keyword matching on the `description` field in each skill's frontmatter -- the descriptions are already written to support this.
-- **Requirements gating**: OpenClaw validates `metadata.openclaw.requires` at load time (checks that binaries/env vars exist). Skills that fail requirements are excluded from the session.
-- **No session hook**: The staleness-check hook is Claude Code specific. In OpenClaw, ask the agent to check for stale research manually, or set up a cron job.
-- **File references**: OpenClaw skills can use `{baseDir}` to reference files relative to the skill folder. The current skills use relative paths that work in both environments.
-
-### Files
-
-```
-openclaw/
-|-- AGENTS.md                Orchestration rules (CLAUDE.md equivalent)
-|-- SOUL.md                  Agent persona
-|-- TOOLS.md                 Available tools and API reference
-|-- setup.ps1                Installation script
-+-- openclaw.example.json    Config template for ~/.openclaw/openclaw.json
-```
+See [docs/compatibility.md](docs/compatibility.md) for pi, Claude Code, OpenAI Codex CLI, Cursor, OpenClaw, and other-agent setup notes.
 
 ## License
 
