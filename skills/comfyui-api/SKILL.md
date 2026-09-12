@@ -44,6 +44,7 @@ curl http://127.0.0.1:8188/system_stats
 ```
 
 **Response fields:**
+
 - `system.os`: Operating system
 - `system.comfyui_version`: Version string
 - `devices[0].name`: GPU name
@@ -59,6 +60,7 @@ curl -X POST http://127.0.0.1:8188/prompt \
 ```
 
 **WORKFLOW_JSON format:**
+
 ```json
 {
   "1": {
@@ -80,6 +82,7 @@ curl -X POST http://127.0.0.1:8188/prompt \
 Each node is keyed by a string ID. Inputs reference other nodes as `["{node_id}", {output_index}]`.
 
 **Response:**
+
 ```json
 {"prompt_id": "abc-123-def", "number": 1}
 ```
@@ -92,6 +95,7 @@ curl http://127.0.0.1:8188/history/abc-123-def
 
 **Incomplete**: Returns `{}` (empty object)
 **Complete**: Returns execution data with outputs:
+
 ```json
 {
   "abc-123-def": {
@@ -162,7 +166,7 @@ Before queuing any workflow:
 ## Error Handling
 
 | Error | Cause | Action |
-|-------|-------|--------|
+| ------- | ------- | -------- |
 | Connection refused | ComfyUI not running | Switch to offline mode, save JSON |
 | 400 Bad Request | Invalid workflow JSON | Validate node connections |
 | 500 Internal Error | ComfyUI crash | Suggest restart, check logs |

@@ -3,7 +3,7 @@
 ## Foundation Skills (no dependencies)
 
 | Skill | Path | Purpose |
-|-------|------|---------|
+| ------- | ------ | --------- |
 | `comfyui-api` | `skills/comfyui-api/` | Connect to ComfyUI, queue workflows, poll results |
 | `comfyui-inventory` | `skills/comfyui-inventory/` | Discover installed models, nodes, VRAM (online + offline) |
 | `project-manager` | `skills/project-manager/` | Character profiles, project manifests, asset tracking |
@@ -17,7 +17,7 @@
 ## Core Creation (depend on inventory)
 
 | Skill | Path | Depends On |
-|-------|------|------------|
+| ------- | ------ | ------------ |
 | `comfyui-prompt-interview` | `skills/comfyui-prompt-interview/` | prompt-engineer |
 | `comfyui-prompt-engineer` | `skills/comfyui-prompt-engineer/` | inventory |
 | `comfyui-workflow-builder` | `skills/comfyui-workflow-builder/` | inventory |
@@ -26,7 +26,7 @@
 ## Production (depend on creation skills)
 
 | Skill | Path | Depends On |
-|-------|------|------------|
+| ------- | ------ | ------------ |
 | `comfyui-video-pipeline` | `skills/comfyui-video-pipeline/` | inventory, workflow-builder |
 | `comfyui-video-production` | `skills/comfyui-video-production/` | inventory, workflow-builder |
 | `comfyui-voice-pipeline` | `skills/comfyui-voice-pipeline/` | inventory |

@@ -586,24 +586,28 @@ def emergency_failover(failed_port, backup_ports=[8189, 8190]):
 ## Troubleshooting
 
 ### ComfyUI won't start
+
 - Check if port is already in use: `netstat -ano | findstr :8188`
 - Verify Python environment is correct
 - Check CUDA/ROCm drivers are installed
 - Review startup logs for errors
 
 ### Instance keeps crashing
+
 - Check VRAM usage - may be OOM
 - Review workflows for memory leaks
 - Update to latest ComfyUI version
 - Check for corrupted models
 
 ### Queue stalls but process is running
+
 - Workflow may have infinite loop
 - Model download may be stuck
 - Custom node may be hanging
 - Try soft recovery first, then hard recovery
 
 ### Failover not working
+
 - Verify backup instance is actually running
 - Check network/firewall settings
 - Ensure backup has same models loaded
