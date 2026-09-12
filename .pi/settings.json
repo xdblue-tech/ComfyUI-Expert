@@ -1,0 +1,48 @@
+{
+  "skills": [
+    "/home/xdblue/.agents/skills/code-review/SKILL.md",
+    "+/home/xdblue/.agents/skills/code-review/SKILL.md",
+    "/home/xdblue/.agents/skills/codebase-design/SKILL.md",
+    "+/home/xdblue/.agents/skills/codebase-design/SKILL.md",
+    "/home/xdblue/.agents/skills/domain-modeling/SKILL.md",
+    "+/home/xdblue/.agents/skills/domain-modeling/SKILL.md"
+  ],
+  "packages": [
+    {
+      "source": "https://github.com/obra/superpowers",
+      "autoload": false,
+      "extensions": [
+        "+.pi/extensions/superpowers.ts"
+      ],
+      "skills": [
+        "+skills/brainstorming/SKILL.md",
+        "+skills/dispatching-parallel-agents/SKILL.md",
+        "+skills/executing-plans/SKILL.md",
+        "+skills/finishing-a-development-branch/SKILL.md",
+        "+skills/receiving-code-review/SKILL.md",
+        "+skills/requesting-code-review/SKILL.md",
+        "+skills/subagent-driven-development/SKILL.md",
+        "+skills/systematic-debugging/SKILL.md",
+        "+skills/test-driven-development/SKILL.md",
+        "+skills/using-git-worktrees/SKILL.md",
+        "+skills/using-superpowers/SKILL.md",
+        "+skills/verification-before-completion/SKILL.md",
+        "+skills/writing-plans/SKILL.md",
+        "+skills/writing-skills/SKILL.md"
+      ]
+    },
+    {
+      "source": "npm:pi-lens",
+      "autoload": false,
+      "extensions": [
+        "+dist/index.js"
+      ],
+      "skills": [
+        "+skills/pi-lens-ast-grep/SKILL.md",
+        "+skills/pi-lens-lsp-navigation/SKILL.md",
+        "+skills/pi-lens-write-ast-grep-rule/SKILL.md",
+        "+skills/pi-lens-write-tree-sitter-rule/SKILL.md"
+      ]
+    }
+  ]
+}
