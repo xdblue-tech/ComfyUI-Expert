@@ -9,6 +9,7 @@ Usage:
 
 Python 3.9+, standard library only.
 """
+
 import argparse
 import json
 import os
@@ -30,7 +31,7 @@ STALE_AFTER_DAYS = 14
 
 def parse_staleness(text, today=None):
     """Parse references/staleness-report.md. Returns last_run/days/stale/note."""
-    today = today or datetime.now(timezone.utc).date()
+    today = today or date.today()
     if "Not yet run" in text:
         return {
             "last_run": None,
