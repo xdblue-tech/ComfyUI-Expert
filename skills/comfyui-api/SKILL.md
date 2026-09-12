@@ -55,7 +55,7 @@ curl http://127.0.0.1:8188/system_stats
 ```bash
 curl -X POST http://127.0.0.1:8188/prompt \
   -H "Content-Type: application/json" \
-  -d '{"prompt": WORKFLOW_JSON, "client_id": "video-agent"}'
+  -d '{"prompt": WORKFLOW_JSON, "client_id": "comfyui-expert"}'
 ```
 
 **WORKFLOW_JSON format:**

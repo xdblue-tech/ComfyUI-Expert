@@ -21,13 +21,14 @@
 | `comfyui-prompt-interview` | `skills/comfyui-prompt-interview/` | prompt-engineer |
 | `comfyui-prompt-engineer` | `skills/comfyui-prompt-engineer/` | inventory |
 | `comfyui-workflow-builder` | `skills/comfyui-workflow-builder/` | inventory |
-| `comfyui-character-gen` | Existing `~/.claude/skills/` | inventory (agent wraps with context) |
+| `comfyui-character-gen` | `skills/comfyui-character-gen/` | inventory (agent wraps with context) |
 
 ## Production (depend on creation skills)
 
 | Skill | Path | Depends On |
 |-------|------|------------|
 | `comfyui-video-pipeline` | `skills/comfyui-video-pipeline/` | inventory, workflow-builder |
+| `comfyui-video-production` | `skills/comfyui-video-production/` | inventory, workflow-builder |
 | `comfyui-voice-pipeline` | `skills/comfyui-voice-pipeline/` | inventory |
 | `comfyui-lora-training` | `skills/comfyui-lora-training/` | inventory |
 

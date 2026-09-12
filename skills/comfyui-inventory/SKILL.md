@@ -2,7 +2,7 @@
 name: comfyui-inventory
 description: Discover and cache all installed ComfyUI models, custom nodes, and system capabilities. Works online (API queries) and offline (directory scanning). Use before generating workflows to verify available resources.
 user-invocable: true
-metadata: {"openclaw":{"emoji":"📦","os":["darwin","linux","win32"],"requires":{"bins":["pwsh"]},"primaryEnv":"COMFYUI_PATH"}}
+metadata: {"openclaw":{"emoji":"📦","os":["darwin","linux","win32"],"requires":{"anyBins":["python3","python"]},"primaryEnv":"COMFYUI_PATH"}}
 ---
 
 # ComfyUI Inventory Skill
@@ -50,7 +50,7 @@ curl http://127.0.0.1:8188/models/diffusion_models
 
 When ComfyUI isn't running, scan the filesystem directly.
 
-**Requires**: ComfyUI installation path (e.g., `C:\ComfyUI`)
+**Requires**: ComfyUI installation path — pass `--comfyui-path`, set `COMFYUI_PATH`, or let the scanner auto-detect (e.g., `C:\ComfyUI`, `~/ComfyUI`).
 
 **Scan directories:**
 ```
@@ -71,6 +71,16 @@ When ComfyUI isn't running, scan the filesystem directly.
 ```
 
 **Custom node detection**: List directories under `custom_nodes/`. Each directory name corresponds to a node package (e.g., `ComfyUI_IPAdapter_plus`, `ComfyUI-Impact-Pack`).
+
+## Scanner CLI
+
+Cross-platform scanner (Python 3.9+, standard library only). It writes `state/inventory.json` and prints a one-line summary. Schema: see docs/architecture.md (Inventory).
+
+```bash
+python3 scripts/scan_inventory.py                  # auto: online first, offline fallback
+python3 scripts/scan_inventory.py --mode offline --comfyui-path "$COMFYUI_PATH"
+python3 scripts/scan_inventory.py --url http://127.0.0.1:8188
+```
 
 ## Cache Format
 
@@ -147,7 +157,7 @@ For each model reference:
 
 - Cache is valid for **1 hour** during active sessions
 - Invalidate cache when user installs new models/nodes
-- Force refresh: `scan-inventory.ps1` or API re-query
+- Force refresh: `python3 scripts/scan_inventory.py` or API re-query
 
 ## Integration
 

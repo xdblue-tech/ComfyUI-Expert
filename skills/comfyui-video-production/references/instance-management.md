@@ -375,6 +375,13 @@ Write-Host "Secondary: http://localhost:8189"
 Write-Host "Backup: http://localhost:8190"
 ```
 
+### POSIX (Linux/macOS, quick start)
+
+```bash
+cd /path/ComfyUI && python main.py --port 8188    # primary instance
+cd /path/ComfyUI && python main.py --port 8189    # second instance
+```
+
 ### Linux/Mac (Bash)
 
 ```bash
