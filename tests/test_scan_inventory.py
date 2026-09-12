@@ -38,7 +38,13 @@ class OnlineScanTests(unittest.TestCase):
             if url.endswith("/system_stats"):
                 return {
                     "system": {"comfyui_version": "9.9.9"},
-                    "devices": [{"name": "cuda:0 Fake", "vram_total": 1000000000, "vram_free": 500000000}],
+                    "devices": [
+                        {
+                            "name": "cuda:0 Fake",
+                            "vram_total": 1000000000,
+                            "vram_free": 500000000,
+                        }
+                    ],
                 }
             if "/models/" in url:
                 return ["m.safetensors"] if url.endswith("/checkpoints") else []
@@ -65,7 +71,10 @@ class PathDetectionTests(unittest.TestCase):
                 self.assertEqual(si.detect_comfyui_path(), Path(tmp))
 
     def test_detect_skips_non_comfyui_dirs(self):
-        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {}, clear=True):
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            mock.patch.dict(os.environ, {}, clear=True),
+        ):
             self.assertIsNone(si.detect_comfyui_path(candidates=[Path(tmp)]))
 
 

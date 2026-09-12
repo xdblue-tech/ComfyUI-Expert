@@ -9,6 +9,7 @@ Modes:
 Output: state/inventory.json (schema documented in docs/architecture.md).
 Python 3.9+, standard library only.
 """
+
 import argparse
 import json
 import os
@@ -23,9 +24,19 @@ DEFAULT_OUTPUT = REPO_ROOT / "state" / "inventory.json"
 DEFAULT_URL = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188")
 
 MODEL_TYPES = [
-    "checkpoints", "loras", "vae", "controlnet", "clip", "clip_vision",
-    "upscale_models", "diffusion_models", "ipadapter", "instantid",
-    "insightface", "facerestore_models", "embeddings",
+    "checkpoints",
+    "loras",
+    "vae",
+    "controlnet",
+    "clip",
+    "clip_vision",
+    "upscale_models",
+    "diffusion_models",
+    "ipadapter",
+    "instantid",
+    "insightface",
+    "facerestore_models",
+    "embeddings",
 ]
 MODEL_EXTENSIONS = {
     "checkpoints": (".safetensors", ".ckpt"),
@@ -43,16 +54,23 @@ MODEL_EXTENSIONS = {
     "embeddings": (".pt", ".safetensors"),
 }
 CANDIDATE_PATHS = [
-    "~/ComfyUI", "~/comfyui", "/opt/ComfyUI", "/workspace/ComfyUI",
-    "C:/ComfyUI", "C:/ComfyUI-Easy-Install/ComfyUI",
-    "E:/ComfyUI-Easy-Install/ComfyUI", "E:/ComfyUI",
+    "~/ComfyUI",
+    "~/comfyui",
+    "/opt/ComfyUI",
+    "/workspace/ComfyUI",
+    "C:/ComfyUI",
+    "C:/ComfyUI-Easy-Install/ComfyUI",
+    "E:/ComfyUI-Easy-Install/ComfyUI",
+    "E:/ComfyUI",
 ]
 
 
 def detect_comfyui_path(candidates=None):
     """Return the first existing ComfyUI directory, or None."""
     env = os.environ.get("COMFYUI_PATH")
-    paths = ([Path(env)] if env else []) + list(candidates or [Path(p).expanduser() for p in CANDIDATE_PATHS])
+    paths = ([Path(env)] if env else []) + list(
+        candidates or [Path(p).expanduser() for p in CANDIDATE_PATHS]
+    )
     for path in paths:
         if (path / "models").is_dir() or (path / "main.py").is_file():
             return path
@@ -77,7 +95,9 @@ def scan_online(url, fetch=http_json):
     models = {}
     for model_type in MODEL_TYPES:
         try:
-            models[model_type] = sorted(fetch(url.rstrip("/") + "/models/" + model_type))
+            models[model_type] = sorted(
+                fetch(url.rstrip("/") + "/models/" + model_type)
+            )
         except (OSError, ValueError):
             models[model_type] = []
     node_classes = sorted(fetch(url.rstrip("/") + "/object_info"))
@@ -110,18 +130,27 @@ def scan_offline(root):
         models[model_type] = sorted(files)
 
     detection = models_dir / "ultralytics" / "bbox"
-    models["detection"] = sorted(p.name for p in detection.glob("*.pt")) if detection.is_dir() else []
+    models["detection"] = (
+        sorted(p.name for p in detection.glob("*.pt")) if detection.is_dir() else []
+    )
 
     motion = root / "custom_nodes" / "ComfyUI-AnimateDiff-Evolved" / "models"
-    models["animatediff_motion"] = sorted(
-        p.name for p in motion.glob("*") if p.suffix.lower() in (".ckpt", ".safetensors")
-    ) if motion.is_dir() else []
+    models["animatediff_motion"] = (
+        sorted(
+            p.name
+            for p in motion.glob("*")
+            if p.suffix.lower() in (".ckpt", ".safetensors")
+        )
+        if motion.is_dir()
+        else []
+    )
 
     custom_nodes = []
     nodes_dir = root / "custom_nodes"
     if nodes_dir.is_dir():
         custom_nodes = sorted(
-            p.name for p in nodes_dir.iterdir()
+            p.name
+            for p in nodes_dir.iterdir()
             if p.is_dir() and p.name != "__pycache__" and not p.name.startswith(".")
         )
 
@@ -131,7 +160,11 @@ def scan_offline(root):
         "comfyui_version": "unknown",
         "comfyui_path": str(root),
         "comfyui_url": "",
-        "system": {"gpu": "unknown (offline scan)", "vram_total_gb": 0, "vram_free_gb": 0},
+        "system": {
+            "gpu": "unknown (offline scan)",
+            "vram_total_gb": 0,
+            "vram_free_gb": 0,
+        },
         "models": models,
         "custom_nodes": custom_nodes,
         "node_classes": [],
@@ -167,7 +200,9 @@ def main(argv=None):
     if data is None:
         root = Path(args.comfyui_path) if args.comfyui_path else detect_comfyui_path()
         if root is None or not Path(root).is_dir():
-            print("[FAIL] no ComfyUI directory found. Pass --comfyui-path or set COMFYUI_PATH.")
+            print(
+                "[FAIL] no ComfyUI directory found. Pass --comfyui-path or set COMFYUI_PATH."
+            )
             return 1
         data = scan_offline(root)
         print("[OK] scanned offline at " + str(root))
