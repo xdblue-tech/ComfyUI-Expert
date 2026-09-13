@@ -123,16 +123,16 @@ class YamlSubsetParserTests(unittest.TestCase):
         cases = self.parse(
             "\n".join(
                 [
-                    '- id: TC-001',
-                    '  name: plain-name',
+                    "- id: TC-001",
+                    "  name: plain-name",
                     '  prompt: "double quoted: with colon"',
-                    '  assertions:',
-                    '    - type: contains',
+                    "  assertions:",
+                    "    - type: contains",
                     "      target: 'single ''quoted'' text'",
-                    '  expected_behavior: >',
-                    '    folded line one',
-                    '    folded line two',
-                    '  edge_case: true',
+                    "  expected_behavior: >",
+                    "    folded line one",
+                    "    folded line two",
+                    "  edge_case: true",
                 ]
             )
         )
@@ -345,7 +345,12 @@ class AssertionResultTests(unittest.TestCase):
         return se.evaluate_assertion(response, assertion_type, target)
 
     def evaluate_with_json(self, assertion_type, json_block, target):
-        return se.evaluate_assertion(assertion_type=assertion_type, target=target, response="", json_block=json_block)
+        return se.evaluate_assertion(
+            assertion_type=assertion_type,
+            target=target,
+            response="",
+            json_block=json_block,
+        )
 
     def test_contains(self):
         self.assertEqual(
@@ -354,14 +359,19 @@ class AssertionResultTests(unittest.TestCase):
         self.assertEqual(self.evaluate("contains", "nothing here", "InstantID"), "FAIL")
 
     def test_not_contains(self):
-        self.assertEqual(self.evaluate("not_contains", "clean output", "InstantID"), "PASS")
         self.assertEqual(
-            self.evaluate("not_contains", "InstantID as primary method", "InstantID"), "FAIL"
+            self.evaluate("not_contains", "clean output", "InstantID"), "PASS"
+        )
+        self.assertEqual(
+            self.evaluate("not_contains", "InstantID as primary method", "InstantID"),
+            "FAIL",
         )
 
     def test_not_contains_uses_quoted_literals_from_descriptive_targets(self):
         target = "Do not mention 'regenerate from scratch' or 'start over'"
-        self.assertEqual(self.evaluate("not_contains", "we edit in place", target), "PASS")
+        self.assertEqual(
+            self.evaluate("not_contains", "we edit in place", target), "PASS"
+        )
         self.assertEqual(
             self.evaluate("not_contains", "you should start over", target), "FAIL"
         )
@@ -375,13 +385,17 @@ class AssertionResultTests(unittest.TestCase):
 
     def test_question_before_code(self):
         self.assertEqual(
-            self.evaluate("question_before_code", "Which model?\n```\ncfg 4\n```"), "PASS"
+            self.evaluate("question_before_code", "Which model?\n```\ncfg 4\n```"),
+            "PASS",
         )
         self.assertEqual(
-            self.evaluate("question_before_code", "```\ncfg 4\n```\nWhich model?"), "FAIL"
+            self.evaluate("question_before_code", "```\ncfg 4\n```\nWhich model?"),
+            "FAIL",
         )
         self.assertEqual(self.evaluate("question_before_code", "Which model?"), "PASS")
-        self.assertEqual(self.evaluate("question_before_code", "```\ncfg 4\n```"), "FAIL")
+        self.assertEqual(
+            self.evaluate("question_before_code", "```\ncfg 4\n```"), "FAIL"
+        )
 
     def test_json_valid(self):
         self.assertEqual(self.evaluate("json_valid", '{"a": 1}'), "PASS")
@@ -398,19 +412,25 @@ class AssertionResultTests(unittest.TestCase):
         self.assertEqual(self.evaluate("json_fields", "no json", "method"), "FAIL")
 
     def test_json_fields_requires_real_keys(self):
-        self.assertEqual(self.evaluate("json_fields", '{"other": "method"}', "method"), "FAIL")
+        self.assertEqual(
+            self.evaluate("json_fields", '{"other": "method"}', "method"), "FAIL"
+        )
 
     def test_token_limit(self):
         self.assertEqual(self.evaluate("token_limit", "one two three", "5"), "PASS")
-        self.assertEqual(self.evaluate("token_limit", " ".join(["word"] * 40), "5"), "FAIL")
+        self.assertEqual(
+            self.evaluate("token_limit", " ".join(["word"] * 40), "5"), "FAIL"
+        )
 
     def test_range_check_numeric_bounds(self):
         assertion = "bias_score >= -1 AND bias_score <= 1"
         self.assertEqual(
-            self.evaluate_with_json("range_check", '{"bias_score": 0.2}', assertion), "PASS"
+            self.evaluate_with_json("range_check", '{"bias_score": 0.2}', assertion),
+            "PASS",
         )
         self.assertEqual(
-            self.evaluate_with_json("range_check", '{"bias_score": 9}', assertion), "FAIL"
+            self.evaluate_with_json("range_check", '{"bias_score": 9}', assertion),
+            "FAIL",
         )
         self.assertEqual(
             self.evaluate_with_json("range_check", '{"other": 1}', assertion), "SKIP"
@@ -419,66 +439,89 @@ class AssertionResultTests(unittest.TestCase):
     def test_range_check_absolute_value(self):
         assertion = "abs(pose_delta) <= 0.2"
         self.assertEqual(
-            self.evaluate_with_json("range_check", '{"pose_delta": -0.1}', assertion), "PASS"
+            self.evaluate_with_json("range_check", '{"pose_delta": -0.1}', assertion),
+            "PASS",
         )
         self.assertEqual(
-            self.evaluate_with_json("range_check", '{"pose_delta": -0.9}', assertion), "FAIL"
+            self.evaluate_with_json("range_check", '{"pose_delta": -0.9}', assertion),
+            "FAIL",
         )
 
     def test_range_check_minimum(self):
         assertion = "quality_score >= 7"
         self.assertEqual(
-            self.evaluate_with_json("range_check", '{"quality_score": 8}', assertion), "PASS"
+            self.evaluate_with_json("range_check", '{"quality_score": 8}', assertion),
+            "PASS",
         )
         self.assertEqual(
-            self.evaluate_with_json("range_check", '{"quality_score": 3}', assertion), "FAIL"
+            self.evaluate_with_json("range_check", '{"quality_score": 3}', assertion),
+            "FAIL",
         )
 
     def test_range_check_length_bounds(self):
         assertion = "len(steps) >= 2 AND len(steps) <= 5"
         self.assertEqual(
-            self.evaluate_with_json("range_check", '{"steps": "hello"}', assertion), "PASS"
+            self.evaluate_with_json("range_check", '{"steps": "hello"}', assertion),
+            "PASS",
         )
         self.assertEqual(
-            self.evaluate_with_json("range_check", '{"steps": "way too long"}', assertion), "FAIL"
+            self.evaluate_with_json(
+                "range_check", '{"steps": "way too long"}', assertion
+            ),
+            "FAIL",
         )
         self.assertEqual(
-            self.evaluate_with_json("range_check", '{"other": "hello"}', assertion), "FAIL"
+            self.evaluate_with_json("range_check", '{"other": "hello"}', assertion),
+            "FAIL",
         )
 
     def test_range_check_length_maximum_and_minimum(self):
         self.assertEqual(
-            self.evaluate_with_json("range_check", '{"steps": "abc"}', "len(steps) <= 5"), "PASS"
-        )
-        self.assertEqual(
-            self.evaluate_with_json("range_check", '{"steps": "abcdefgh"}', "len(steps) <= 5"),
-            "FAIL",
-        )
-        self.assertEqual(
-            self.evaluate_with_json("range_check", '{"steps": [1, 2, 3]}', "len(steps) >= 3"),
+            self.evaluate_with_json(
+                "range_check", '{"steps": "abc"}', "len(steps) <= 5"
+            ),
             "PASS",
         )
         self.assertEqual(
-            self.evaluate_with_json("range_check", '{"steps": [1]}', "len(steps) >= 3"), "FAIL"
+            self.evaluate_with_json(
+                "range_check", '{"steps": "abcdefgh"}', "len(steps) <= 5"
+            ),
+            "FAIL",
         )
         self.assertEqual(
-            self.evaluate_with_json("range_check", '{"steps": "abcdef"}', "len(steps) >= 3"),
+            self.evaluate_with_json(
+                "range_check", '{"steps": [1, 2, 3]}', "len(steps) >= 3"
+            ),
+            "PASS",
+        )
+        self.assertEqual(
+            self.evaluate_with_json("range_check", '{"steps": [1]}', "len(steps) >= 3"),
+            "FAIL",
+        )
+        self.assertEqual(
+            self.evaluate_with_json(
+                "range_check", '{"steps": "abcdef"}', "len(steps) >= 3"
+            ),
             "PASS",
         )
 
     def test_range_check_word_count(self):
         assertion = "word_count(notes) >= 2 AND word_count(notes) <= 4"
         self.assertEqual(
-            self.evaluate_with_json("range_check", '{"notes": "one two three"}', assertion),
+            self.evaluate_with_json(
+                "range_check", '{"notes": "one two three"}', assertion
+            ),
             "PASS",
         )
         self.assertEqual(
-            self.evaluate_with_json("range_check", '{"notes": "one"}', assertion), "FAIL"
+            self.evaluate_with_json("range_check", '{"notes": "one"}', assertion),
+            "FAIL",
         )
 
     def test_range_check_requires_json(self):
         self.assertEqual(
-            self.evaluate_with_json("range_check", "not json", "len(steps) <= 5"), "FAIL"
+            self.evaluate_with_json("range_check", "not json", "len(steps) <= 5"),
+            "FAIL",
         )
         self.assertEqual(
             self.evaluate_with_json("range_check", "", "quality_score >= 7"), "FAIL"
@@ -486,7 +529,8 @@ class AssertionResultTests(unittest.TestCase):
 
     def test_range_check_unknown_expression_is_skipped(self):
         self.assertEqual(
-            self.evaluate_with_json("range_check", '{"a": 1}', "a is roughly fine"), "SKIP"
+            self.evaluate_with_json("range_check", '{"a": 1}', "a is roughly fine"),
+            "SKIP",
         )
 
     def test_structure_and_sequence_checks_are_soft(self):
@@ -551,7 +595,7 @@ class AgentCommandTests(unittest.TestCase):
 
     def test_prompt_placeholder_is_substituted(self):
         argv = se.build_agent_argv(
-            f'{STUB_AGENT_CMD} --prompt {{prompt}}', "hello world", PROMPT_FILE
+            f"{STUB_AGENT_CMD} --prompt {{prompt}}", "hello world", PROMPT_FILE
         )
         self.assertIn("hello world", argv)
         self.assertTrue(self.run_stub(argv).startswith("PROMPT-RECEIVED: hello world"))
@@ -561,7 +605,7 @@ class AgentCommandTests(unittest.TestCase):
             prompt_file = Path(tmp) / "TC-001.txt"
             prompt_file.write_text("from the file", encoding="utf-8")
             argv = se.build_agent_argv(
-                f'{STUB_AGENT_CMD} --prompt-file {{prompt_file}}',
+                f"{STUB_AGENT_CMD} --prompt-file {{prompt_file}}",
                 "from the file",
                 prompt_file,
             )
@@ -575,22 +619,16 @@ class AgentCommandTests(unittest.TestCase):
             STUB_AGENT_CMD, 'quoted "text" with spaces', PROMPT_FILE
         )
         self.assertEqual(argv[-1], 'quoted "text" with spaces')
-        self.assertIn(
-            'PROMPT-RECEIVED: quoted "text" with spaces', self.run_stub(argv)
-        )
+        self.assertIn('PROMPT-RECEIVED: quoted "text" with spaces', self.run_stub(argv))
 
     def test_quoted_arguments_are_split_on_posix(self):
         argv = se.split_agent_command(
             'my-agent --model "big model" --flag', platform="posix"
         )
-        self.assertEqual(
-            argv, ["my-agent", "--model", "big model", "--flag"]
-        )
+        self.assertEqual(argv, ["my-agent", "--model", "big model", "--flag"])
 
     def test_windows_splitting_keeps_backslashes(self):
-        argv = se.split_agent_command(
-            r'"C:\Program Files\agent.exe" -p', platform="nt"
-        )
+        argv = se.split_agent_command(r'"C:\Program Files\agent.exe" -p', platform="nt")
         self.assertEqual(argv, [r"C:\Program Files\agent.exe", "-p"])
 
     def test_empty_command_is_a_harness_error(self):
@@ -645,12 +683,12 @@ class DryRunTests(unittest.TestCase):
         self.assertIn("Dry run: no agent invoked and no result files written.", stdout)
 
     def test_dry_run_writes_no_results(self):
-        results_dir = REPO_ROOT / "skills" / "comfyui-character-gen" / "eval" / "results"
+        results_dir = (
+            REPO_ROOT / "skills" / "comfyui-character-gen" / "eval" / "results"
+        )
         before = sorted(entry.name for entry in results_dir.iterdir())
         run_main(["--skill", "comfyui-character-gen", "--dry-run"])
-        self.assertEqual(
-            sorted(entry.name for entry in results_dir.iterdir()), before
-        )
+        self.assertEqual(sorted(entry.name for entry in results_dir.iterdir()), before)
 
     def test_dry_run_honours_the_case_filter(self):
         code, stdout, _stderr = run_main(
@@ -767,8 +805,12 @@ class ScoredRunTests(unittest.TestCase):
                 env={"EVAL_AGENT_CMD": STUB_AGENT_CMD},
             )
             self.assertEqual(code, 0)
-            self.assertTrue((root / "skill-only" / "with-skill" / "TC-001.md").is_file())
-            scorecard = (root / "skill-only" / "scorecard.md").read_text(encoding="utf-8")
+            self.assertTrue(
+                (root / "skill-only" / "with-skill" / "TC-001.md").is_file()
+            )
+            scorecard = (root / "skill-only" / "scorecard.md").read_text(
+                encoding="utf-8"
+            )
             self.assertIn(f"| TC-001 | {STUB_CASE_ONE_SCORE} | — |", scorecard)
 
             code, _stdout, _stderr = run_main(
@@ -784,7 +826,9 @@ class ScoredRunTests(unittest.TestCase):
                 env={"EVAL_AGENT_CMD": STUB_AGENT_CMD},
             )
             self.assertEqual(code, 0)
-            self.assertTrue((root / "baseline-only" / "baseline" / "TC-001.md").is_file())
+            self.assertTrue(
+                (root / "baseline-only" / "baseline" / "TC-001.md").is_file()
+            )
             scorecard = (root / "baseline-only" / "scorecard.md").read_text(
                 encoding="utf-8"
             )
@@ -834,9 +878,9 @@ class ScoredRunTests(unittest.TestCase):
                 env={"EVAL_AGENT_CMD": "/definitely/missing/agent"},
             )
             self.assertEqual(code, 0, stderr)
-            scorecard = (
-                results_root / "20260101-000000" / "scorecard.md"
-            ).read_text(encoding="utf-8")
+            scorecard = (results_root / "20260101-000000" / "scorecard.md").read_text(
+                encoding="utf-8"
+            )
             self.assertIn("| TC-001 |", scorecard)
 
     def test_score_only_without_results_is_a_harness_error(self):
@@ -894,9 +938,7 @@ class ScoredRunTests(unittest.TestCase):
             (skill_dir / "eval" / "test-cases.yaml").write_text(
                 "- id: TC-001\n  prompt: hi\n  unexpected_key: true\n", encoding="utf-8"
             )
-            code, _stdout, stderr = run_main(
-                ["--skill", str(skill_dir), "--dry-run"]
-            )
+            code, _stdout, stderr = run_main(["--skill", str(skill_dir), "--dry-run"])
             self.assertEqual(code, 2)
             self.assertIn("unexpected_key", stderr)
             self.assertIn("test-cases.yaml:3", stderr)
