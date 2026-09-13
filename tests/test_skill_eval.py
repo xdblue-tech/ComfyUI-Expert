@@ -316,6 +316,83 @@ class YamlSubsetParserTests(unittest.TestCase):
         )
         self.assertIn("anchors", message)
 
+    def test_alias_fails_loudly_with_location(self):
+        message = self.parse_error(
+            "\n".join(
+                [
+                    "- id: TC-001",
+                    "  prompt: *shared-prompt",
+                    "  assertions:",
+                    "    - type: contains",
+                ]
+            )
+        )
+        self.assertIn("test-cases.yaml:2", message)
+        self.assertIn("aliases", message)
+
+    def test_tag_fails_loudly_with_location(self):
+        message = self.parse_error(
+            "\n".join(
+                [
+                    "- id: TC-001",
+                    "  prompt: !custom value",
+                    "  assertions:",
+                    "    - type: contains",
+                ]
+            )
+        )
+        self.assertIn("test-cases.yaml:2", message)
+        self.assertIn("tags", message)
+
+    def test_invalid_block_header_fails_loudly_with_location(self):
+        message = self.parse_error(
+            "\n".join(
+                [
+                    "- id: TC-001",
+                    "  prompt: |0",
+                    "    unsupported header",
+                    "  assertions:",
+                    "    - type: contains",
+                ]
+            )
+        )
+        self.assertIn("test-cases.yaml:2", message)
+        self.assertIn("unsupported block scalar header", message)
+
+    def test_inconsistent_block_indentation_fails_loudly_with_location(self):
+        message = self.parse_error(
+            "\n".join(
+                [
+                    "- id: TC-001",
+                    "  prompt: |2",
+                    "    correctly indented",
+                    "   incorrectly indented",
+                    "  assertions:",
+                    "    - type: contains",
+                ]
+            )
+        )
+        self.assertIn("test-cases.yaml:4", message)
+        self.assertIn("inconsistent indentation", message)
+
+    def test_folded_block_with_indent_indicator_and_keep_chomping(self):
+        cases = self.parse(
+            "\n".join(
+                [
+                    "- id: TC-001",
+                    "  prompt: >2+",
+                    "    folded line one",
+                    "    folded line two",
+                    "",
+                    "",
+                    "  assertions:",
+                    "    - type: contains",
+                    "      target: x",
+                ]
+            )
+        )
+        self.assertEqual(cases[0]["prompt"], "folded line one folded line two\n\n\n")
+
     def test_unterminated_quote_fails_loudly(self):
         message = self.parse_error(
             "\n".join(
@@ -631,6 +708,74 @@ class AgentCommandTests(unittest.TestCase):
         argv = se.split_agent_command(r'"C:\Program Files\agent.exe" -p', platform="nt")
         self.assertEqual(argv, [r"C:\Program Files\agent.exe", "-p"])
 
+    def test_windows_prompt_placeholder_preserves_quoted_prompt_and_arguments(self):
+        prompt = 'say "quoted words" in a spaced prompt'
+        prompt_file = Path(r"C:\Temp Files\prompt file.txt")
+        argv = se.build_agent_argv(
+            r'"C:\Program Files\agent.exe" --profile "fast mode" '
+            r'--label "quoted argument" --prompt {prompt}',
+            prompt,
+            prompt_file,
+            platform="nt",
+        )
+        self.assertEqual(
+            argv,
+            [
+                r"C:\Program Files\agent.exe",
+                "--profile",
+                "fast mode",
+                "--label",
+                "quoted argument",
+                "--prompt",
+                prompt,
+            ],
+        )
+
+    def test_windows_prompt_file_placeholder_preserves_spaced_arguments(self):
+        prompt = 'say "quoted words" in a spaced prompt'
+        prompt_file = Path(r"C:\Temp Files\prompt file.txt")
+        argv = se.build_agent_argv(
+            r'"C:\Program Files\agent.exe" --profile "fast mode" '
+            r'--label "quoted argument" --prompt-file {prompt_file}',
+            prompt,
+            prompt_file,
+            platform="nt",
+        )
+        self.assertEqual(
+            argv,
+            [
+                r"C:\Program Files\agent.exe",
+                "--profile",
+                "fast mode",
+                "--label",
+                "quoted argument",
+                "--prompt-file",
+                str(prompt_file),
+            ],
+        )
+
+    def test_windows_appended_prompt_preserves_quoted_prompt_and_arguments(self):
+        prompt = 'say "quoted words" in a spaced prompt'
+        prompt_file = Path(r"C:\Temp Files\prompt file.txt")
+        argv = se.build_agent_argv(
+            r'"C:\Program Files\agent.exe" --profile "fast mode" '
+            r'--label "quoted argument"',
+            prompt,
+            prompt_file,
+            platform="nt",
+        )
+        self.assertEqual(
+            argv,
+            [
+                r"C:\Program Files\agent.exe",
+                "--profile",
+                "fast mode",
+                "--label",
+                "quoted argument",
+                prompt,
+            ],
+        )
+
     def test_empty_command_is_a_harness_error(self):
         with self.assertRaises(se.HarnessError):
             se.split_agent_command("   ")
@@ -642,9 +787,20 @@ class AgentCommandTests(unittest.TestCase):
     def test_missing_executable_is_a_harness_error(self):
         with tempfile.TemporaryDirectory() as tmp:
             missing = Path(tmp) / "not-an-agent"
-            with self.assertRaises(se.HarnessError) as caught:
+            with mock.patch.object(se.os, "name", "nt"), self.assertRaises(
+                se.HarnessError
+            ) as caught:
                 se.validate_agent_command([str(missing)])
             self.assertIn("not executable", str(caught.exception))
+
+    def test_validate_agent_command_uses_windows_path_rules_when_injected(self):
+        with (
+            mock.patch.object(se.os, "name", "nt"),
+            mock.patch.object(se.shutil, "which", return_value=None),
+            self.assertRaises(se.HarnessError) as caught,
+        ):
+            se.validate_agent_command(["not-an-agent.exe"])
+        self.assertIn("not executable", str(caught.exception))
 
 
 class DryRunTests(unittest.TestCase):
@@ -912,7 +1068,7 @@ class ScoredRunTests(unittest.TestCase):
             self.assertEqual(code, 2)
             self.assertIn("not executable", stderr)
 
-    def test_missing_agent_command_is_a_harness_error(self):
+    def test_explicit_nonexistent_agent_command_is_a_harness_error(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             skill_dir = write_stub_skill(root)
@@ -929,6 +1085,42 @@ class ScoredRunTests(unittest.TestCase):
             )
             self.assertEqual(code, 2)
             self.assertIn("no-such-agent", stderr)
+
+    def test_empty_agent_command_flag_falls_back_to_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            skill_dir = write_stub_skill(root)
+            with mock.patch.object(se, "DEFAULT_AGENT_COMMAND", STUB_AGENT_CMD):
+                code, _stdout, stderr = run_main(
+                    [
+                        "--skill",
+                        str(skill_dir),
+                        "--results-dir",
+                        str(root / "results"),
+                        "--agent-cmd",
+                        "",
+                    ],
+                    env={"EVAL_AGENT_CMD": ""},
+                )
+            self.assertEqual(code, 0, stderr)
+            self.assertTrue((root / "results" / "scorecard.md").is_file())
+
+    def test_empty_agent_command_environment_falls_back_to_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            skill_dir = write_stub_skill(root)
+            with mock.patch.object(se, "DEFAULT_AGENT_COMMAND", STUB_AGENT_CMD):
+                code, _stdout, stderr = run_main(
+                    [
+                        "--skill",
+                        str(skill_dir),
+                        "--results-dir",
+                        str(root / "results"),
+                    ],
+                    env={"EVAL_AGENT_CMD": ""},
+                )
+            self.assertEqual(code, 0, stderr)
+            self.assertTrue((root / "results" / "scorecard.md").is_file())
 
     def test_invalid_yaml_is_a_harness_error(self):
         with tempfile.TemporaryDirectory() as tmp:

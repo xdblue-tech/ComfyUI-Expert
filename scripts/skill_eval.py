@@ -38,7 +38,7 @@ import shlex
 import shutil
 import subprocess
 import sys
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -121,23 +121,46 @@ class YamlSubsetParser:
         return cases
 
     def _parse_case(self) -> dict[str, Any]:
+        case, start_line = self._parse_mapping_sequence_item(
+            item_indent=0,
+            child_indent=2,
+            item_label="case",
+            key_error="expected a case mapping key indented by two spaces",
+            stop_at_next_item=True,
+            add_value=self._add_case_value,
+        )
+        for required_key in ("id", "prompt", "assertions"):
+            if required_key not in case:
+                self.fail(start_line, f"case is missing required key '{required_key}'")
+        if not isinstance(case["assertions"], list):
+            self.fail(start_line, "'assertions' must be a sequence")
+        return case
+
+    def _parse_mapping_sequence_item(
+        self,
+        item_indent: int,
+        child_indent: int,
+        item_label: str,
+        key_error: str,
+        stop_at_next_item: bool,
+        add_value: Callable[[dict[str, Any], str, str, int, int], None],
+    ) -> tuple[dict[str, Any], int]:
         line_number = self.index + 1
         line = self.lines[self.index]
-        if not line.startswith("-"):
-            self.fail(line_number, "expected a top-level sequence item")
+        if not line[item_indent:].startswith("-"):
+            self.fail(line_number, f"expected a {item_label} sequence item")
 
-        item = line[1:]
+        item = line[item_indent + 1 :]
         if item and not item.startswith(" "):
-            self.fail(line_number, "expected '- ' before a case mapping")
+            self.fail(line_number, f"expected '- ' before a {item_label} mapping")
 
-        case: dict[str, Any] = {}
+        mapping: dict[str, Any] = {}
         start_line = line_number
         self.index += 1
-
         inline = item.strip()
         if inline:
             key, value = self._split_mapping(inline, line_number)
-            self._add_case_value(case, key, value, 0, line_number)
+            add_value(mapping, key, value, item_indent, line_number)
 
         while True:
             self._skip_ignorable()
@@ -147,25 +170,20 @@ class YamlSubsetParser:
             current_number = self.index + 1
             current = self.lines[self.index]
             indent = self._indent(current, current_number)
-            if indent == 0:
-                if current.startswith("-"):
+            if indent <= item_indent:
+                if stop_at_next_item and indent == item_indent and current.startswith("-"):
                     break
-                self.fail(current_number, "expected the next case sequence item")
-            if indent != 2:
-                self.fail(
-                    current_number, "expected a case mapping key indented by two spaces"
-                )
+                if stop_at_next_item and indent == item_indent:
+                    self.fail(current_number, "expected the next case sequence item")
+                break
+            if indent != child_indent:
+                self.fail(current_number, key_error)
 
-            key, value = self._split_mapping(current[2:], current_number)
+            key, value = self._split_mapping(current[child_indent:], current_number)
             self.index += 1
-            self._add_case_value(case, key, value, 2, current_number)
+            add_value(mapping, key, value, child_indent, current_number)
 
-        for required_key in ("id", "prompt", "assertions"):
-            if required_key not in case:
-                self.fail(start_line, f"case is missing required key '{required_key}'")
-        if not isinstance(case["assertions"], list):
-            self.fail(start_line, "'assertions' must be a sequence")
-        return case
+        return mapping, start_line
 
     def _add_case_value(
         self,
@@ -213,40 +231,14 @@ class YamlSubsetParser:
         return assertions
 
     def _parse_assertion(self, item_indent: int) -> dict[str, Any]:
-        line_number = self.index + 1
-        line = self.lines[self.index]
-        item = line[item_indent + 1 :]
-        if item and not item.startswith(" "):
-            self.fail(line_number, "expected '- ' before an assertion mapping")
-
-        assertion: dict[str, Any] = {}
-        start_line = line_number
-        self.index += 1
-        inline = item.strip()
-        if inline:
-            key, value = self._split_mapping(inline, line_number)
-            self._add_assertion_value(assertion, key, value, item_indent, line_number)
-
-        child_indent = item_indent + 2
-        while True:
-            self._skip_ignorable()
-            if self.index >= len(self.lines):
-                break
-
-            current_number = self.index + 1
-            current = self.lines[self.index]
-            indent = self._indent(current, current_number)
-            if indent <= item_indent:
-                break
-            if indent != child_indent:
-                self.fail(current_number, "expected an assertion mapping key")
-
-            key, value = self._split_mapping(current[child_indent:], current_number)
-            self.index += 1
-            self._add_assertion_value(
-                assertion, key, value, child_indent, current_number
-            )
-
+        assertion, start_line = self._parse_mapping_sequence_item(
+            item_indent=item_indent,
+            child_indent=item_indent + 2,
+            item_label="assertion",
+            key_error="expected an assertion mapping key",
+            stop_at_next_item=False,
+            add_value=self._add_assertion_value,
+        )
         if "type" not in assertion:
             self.fail(start_line, "assertion is missing required key 'type'")
         return assertion
@@ -1218,15 +1210,15 @@ def run_evaluation(arguments: argparse.Namespace) -> int:
         probe_prompt_file = results_dir / "prompts" / (_safe_case_id(cases[0]) + ".txt")
         validate_agent_command(build_agent_argv(command, "", probe_prompt_file))
 
-        if run_skill:
-            print("── With Skill ──")
+        for mode, enabled, heading in (
+            ("with-skill", run_skill, "── With Skill ──"),
+            ("baseline", run_baseline, "── Baseline (no skill) ──"),
+        ):
+            if not enabled:
+                continue
+            print(heading)
             for case in cases:
-                _run_case(skill_name, case, "with-skill", command, results_dir)
-            print("")
-        if run_baseline:
-            print("── Baseline (no skill) ──")
-            for case in cases:
-                _run_case(skill_name, case, "baseline", command, results_dir)
+                _run_case(skill_name, case, mode, command, results_dir)
             print("")
 
     scorecard = generate_scorecard(
