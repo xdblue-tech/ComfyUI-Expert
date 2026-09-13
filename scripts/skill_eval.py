@@ -171,7 +171,11 @@ class YamlSubsetParser:
             current = self.lines[self.index]
             indent = self._indent(current, current_number)
             if indent <= item_indent:
-                if stop_at_next_item and indent == item_indent and current.startswith("-"):
+                if (
+                    stop_at_next_item
+                    and indent == item_indent
+                    and current.startswith("-")
+                ):
                     break
                 if stop_at_next_item and indent == item_indent:
                     self.fail(current_number, "expected the next case sequence item")

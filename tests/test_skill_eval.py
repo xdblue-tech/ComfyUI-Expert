@@ -787,9 +787,10 @@ class AgentCommandTests(unittest.TestCase):
     def test_missing_executable_is_a_harness_error(self):
         with tempfile.TemporaryDirectory() as tmp:
             missing = Path(tmp) / "not-an-agent"
-            with mock.patch.object(se.os, "name", "nt"), self.assertRaises(
-                se.HarnessError
-            ) as caught:
+            with (
+                mock.patch.object(se.os, "name", "nt"),
+                self.assertRaises(se.HarnessError) as caught,
+            ):
                 se.validate_agent_command([str(missing)])
             self.assertIn("not executable", str(caught.exception))
 
