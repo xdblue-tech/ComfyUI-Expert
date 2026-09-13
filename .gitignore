@@ -1,8 +1,9 @@
 # Runtime state (machine-specific)
-state/session.json
-state/inventory.json
+state/*
+!state/.gitkeep
 
 # Project outputs (large/personal)
+output/
 projects/*/outputs/
 projects/*/assets/
 
