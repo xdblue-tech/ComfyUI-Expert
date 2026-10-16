@@ -29,3 +29,7 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
+
+# In-repo smoke-test outputs of the distribute package
+distribute/output/
+distribute/projects/

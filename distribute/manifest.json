@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "built_at": "2026-10-16T04:21:57.511945+00:00",
+  "templates": {
+    "unholy-sdxl": {
+      "schema": 1,
+      "model_family": "sdxl",
+      "model_info": {
+        "checkpoint": "unholyDesireMixSinister_v80.safetensors",
+        "trigger_word": "",
+        "lora": "cinematic photography detailed illu xl v5.safetensors",
+        "lora_strength": "0.8",
+        "base_prompt": ""
+      },
+      "positive": {
+        "node": "2",
+        "field": "text"
+      },
+      "negative": {
+        "node": "3",
+        "field": "text"
+      },
+      "seed": {
+        "node": "5",
+        "field": "seed"
+      },
+      "size": {
+        "node": "4",
+        "width_field": "width",
+        "height_field": "height",
+        "guidance": "SDXL native ~1024x1024, keep ~1M pixels"
+      },
+      "default_seed_policy": "random"
+    }
+  }
+}

@@ -15,6 +15,7 @@ tools and no runpodctl required.
 | Build/push images | `scripts/rp_images.py` | `state/images.json` |
 | Register/sync endpoints | `scripts/rp_endpoints.py` | `state/endpoints.json` |
 | Produce (submit workflows) | `scripts/rp_submit.py` | `output/<job-id>/` or `projects/<p>/output/<job-id>/` |
+| Export (third-party agents) | `scripts/rp_distribute.py` | `distribute/` (templates + manifest + standalone tool + packaged skill) |
 
 Config: `config/rp.yaml` (Docker namespace, `comfyui_models_path`, base image, API key
 file, per-profile GPU ids, worker bounds, timeouts). Read it before acting; every

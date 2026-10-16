@@ -1,0 +1,43 @@
+# Distributable template metadata for workflows/unholy-sdxl.json.
+#
+# scripts/rp_distribute.py compiles this file into distribute/manifest.json. A template
+# ships only when it has both this sidecar and an active endpoint in state/endpoints.json
+# whose "name" equals the template base name (the JSON filename without .json).
+#
+# Schema (parsed by rp_common.load_yaml_file, the repo's YAML subset parser):
+#   schema:              literal 1, the schema version rp_distribute.py understands
+#   model_family:        prompt family for the agent (sdxl, flux, wan, krea2, ...)
+#   model_info:          free-form map shown in the manifest; checkpoint + lora are the
+#                        baked model files, trigger_word is "" when the lora has none
+#   positive:            the CLIPTextEncode node feeding KSampler.positive
+#   negative:            the CLIPTextEncode node feeding KSampler.negative
+#   seed:                the KSampler node holding the sampling seed
+#   size:                the EmptyLatentImage node and its width/height field names
+#   default_seed_policy: random (fresh seed every run) or fixed, surfaced to the agent
+#
+# A future video template (model_family: wan) uses the same keys; positive/negative may
+# point at any text-encoder node and size may be omitted when the graph fixes its own
+# resolution.
+schema: 1
+model_family: sdxl
+model_info:
+  checkpoint: unholyDesireMixSinister_v80.safetensors
+  trigger_word: ""
+  lora: cinematic photography detailed illu xl v5.safetensors
+  lora_strength: 0.8
+  base_prompt: ""
+positive:
+  node: "2"
+  field: text
+negative:
+  node: "3"
+  field: text
+seed:
+  node: "5"
+  field: seed
+size:
+  node: "4"
+  width_field: width
+  height_field: height
+  guidance: "SDXL native ~1024x1024, keep ~1M pixels"
+default_seed_policy: random

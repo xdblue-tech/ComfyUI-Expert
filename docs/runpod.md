@@ -119,6 +119,19 @@ image jobs take ~30 s to start + ~17 s to generate at 832×1216, 30 steps.
 | Job fails `file not found` | a loader's model file wasn't baked into the image | add the file to models.yaml + Dockerfile, rebuild, push, new tag + endpoint |
 | Broken-symlink error on check | a models.yaml file is a dangling symlink locally | restore the file or remove it from the manifest |
 
+## Distribute (third-party package)
+
+`distribute/` is a standalone export for agents outside this repo: workflow
+templates, the compiled manifest, an endpoint snapshot, the self-contained run
+tool (`bin/rp_oneshot.py`, override flags — no hand-editing of workflow JSON),
+and the packaged skill (`skills/runpod-oneshot/`). No secrets inside; the tool
+reads `RUNPOD_API_KEY` from the environment. A template ships only when it has
+a `workflows/<name>.meta.yaml` sidecar and an active endpoint named after it.
+
+```bash
+python3 scripts/rp_distribute.py build && python3 scripts/rp_distribute.py check
+```
+
 ## State files
 
 | File | What it tracks |
