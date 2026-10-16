@@ -40,6 +40,7 @@ Based on request + inventory, choose from:
 | LoRA Character | Trained character | + LoRA Loader |
 | Image-to-Video (Wan) | High-quality video | Diffusion Model → Wan I2V → Video Combine |
 | Image-to-Video (AnimateDiff) | Fast video, motion control | + AnimateDiff Loader + Motion LoRAs |
+| Krea 2 (K2) text-to-image | Flux-derived DiT with Qwen3-VL-4B encoder | `UNETLoader` + `CLIPLoader(type="krea2")` + `VAELoader(krea2RealVae)` → `KSampler` |
 | Talking Head | Character speaks | Image → Video → Voice → Lip-Sync |
 | Upscale | Enhance resolution | Image → UltimateSDUpscale → Save |
 | Inpainting | Edit regions | Image + Mask → Inpaint Model → KSampler |
@@ -130,6 +131,62 @@ Before presenting to user:
 }
 ```
 
+### Krea 2 Text-to-Image (Qwen3-VL-4B)
+
+Krea 2 (K2) is a Flux-derived DiT (signature key `txtfusion.projector.weight` in the diffusion-model state dict) trained on a 12-layer Qwen3-VL-4B text-encoder tap and conditioned on 30720-D hidden stacks. It is *not* a vanilla Flux model — the loader chain, VAE, sampler, and CFG are all distilled. The standard Flux chain (`DualCLIPLoader(clip_l + t5xxl)` + `ae.safetensors` + `karras`) will load but fail at conditioning time or produce grid noise.
+
+```json
+{
+  "1": {
+    "class_type": "UNETLoader",
+    "inputs": {"unet_name": "darkBeastKREA2_fp8.safetensors", "weight_dtype": "default"}
+  },
+  "2": {
+    "class_type": "CLIPLoader",
+    "inputs": {"clip_name": "qwen3vl_4b_fp8_scaled.safetensors", "type": "krea2"}
+  },
+  "3": {
+    "class_type": "VAELoader",
+    "inputs": {"vae_name": "krea2RealVae_v10.safetensors"}
+  },
+  "4": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {"text": "{positive_prompt}", "clip": ["2", 0]}
+  },
+  "5": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {"text": "{negative_prompt}", "clip": ["2", 0]}
+  },
+  "6": {
+    "class_type": "EmptyLatentImage",
+    "inputs": {"width": 1024, "height": 1024, "batch_size": 1}
+  },
+  "7": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 42,
+      "steps": 12,
+      "cfg": 1.0,
+      "sampler_name": "er_sde",
+      "scheduler": "simple",
+      "denoise": 1.0,
+      "model": ["1", 0],
+      "positive": ["4", 0],
+      "negative": ["5", 0],
+      "latent_image": ["6", 0]
+    }
+  },
+  "8": {
+    "class_type": "VAEDecode",
+    "inputs": {"samples": ["7", 0], "vae": ["3", 0]}
+  },
+  "9": {
+    "class_type": "SaveImage",
+    "inputs": {"filename_prefix": "k2", "images": ["8", 0]}
+  }
+}
+```
+
 ### With Identity Preservation (InstantID + IP-Adapter)
 
 Extends basic template by adding:
@@ -173,6 +230,15 @@ See `references/workflows.md` Workflow 4 for complete settings.
 3. **Wrong resolution for model**: FLUX/SDXL=1024, SD1.5=512
 4. **Missing VAE**: FLUX needs explicit VAE (`ae.safetensors`)
 5. **Wrong model in wrong loader**: Diffusion models need `LoadDiffusionModel`, not `LoadCheckpoint`
+
+## Krea 2 Gotchas
+
+- **VAE mismatch is the #1 silent failure.** The standard Flux `ae.safetensors` decodes K2 latents as a regular grid/tiled noise pattern — every pixel is high-variance but no subject is visible. Use the K2-specific `krea2RealVae_v10.safetensors` (≈485 MB). When in doubt: `safe_load()` it and look for the `modelspec.architecture` field — K2-Real-VAE lists `conv1`/`conv2` keys rather than `decoder.*`/`encoder.*`.
+- **Text encoder is Qwen3-VL, not Flux T5/CLIP-L.** Use `CLIPLoader(clip_name="qwen3vl_4b_fp8_scaled.safetensors", type="krea2")`. `DualCLIPLoader` with `clip_l`+`t5xxl` will load but produce `RuntimeError: Krea2 expects conditioning with 12x2560=30720 features but got 4096`.
+- **Distilled sampling is non-negotiable.** `er_sde` sampler + `simple` scheduler + cfg=1.0 + steps=4–12. `karras` scheduler and CFG≥2 desync the timestep schedule and blow out the image.
+- **Detect K2 architecture by signature.** `model.diffusion_model.txtfusion.projector.weight` present in the state dict → K2. Handled automatically by `comfy/model_detection.py`; you only need to know this when reading a fresh safetensors file.
+- **The checkpoint's metadata is the recipe.** Many K2 fine-tunes embed a ComfyUI workflow JSON in the safetensors `metadata.workflow` field. Extract it (`safetensors.torch.safe_open(...).metadata()['workflow']`) and copy the author's exact `KSampler`/`VAELoader` settings before guessing.
+- **Resolution baseline is 1024×1024.** K2 fine-tunes are trained on 1024 and produce coherent 1024×1024 outputs; 832×1216 or 1280×720 work but check the checkpoint's embedded workflow for the canonical resolution.
 
 ## Reference Files
 

@@ -1,0 +1,55 @@
+# RunPod ComfyUI production config.
+#
+# Read by scripts/rp_images.py, scripts/rp_endpoints.py, scripts/rp_submit.py.
+# YAML subset only (maps, block lists, inline lists, scalars) — see
+# scripts/rp_common.py:load_yaml. No PyYAML dependency.
+
+# Replace with your Docker Hub namespace, then `docker login` once.
+docker_namespace: xdblue
+
+# Repository name overrides; default is comfyui-<short spec>.
+repo_names:
+  images-sdxl: unholy-sdxl
+  # video-wan: unholy-video-wan  # set before building the video image
+
+# Local ComfyUI models tree. rp_images.py uses it as the Docker build context,
+# so Dockerfile COPY paths can name model files directly.
+comfyui_models_path: /home/xdblue/ComfyUI/models
+
+# Base image for every worker in images/.
+# Pin rule: run `docker manifest inspect runpod/worker-comfyui:5.11.0-base`
+# first; if it resolves, pin 5.11.0-base-cuda12.8.1. Otherwise keep 5.10.0.
+# Never `latest` — RunPod caches images per host and a mutable tag goes stale.
+base_image: runpod/worker-comfyui:5.10.0-base-cuda12.8.1
+
+# API key for rest.runpod.io/v1 and api.runpod.ai/v2.
+# RUNPOD_API_KEY in the environment wins over this file.
+api_key_file: ~/.runpod/api_key
+
+# GPU type ids are the display names RunPod's catalog uses, and they are one-line
+# fixes here if a name is wrong. Verify with `runpodctl gpu list` (a serverless
+# *pool* id such as AMPERE_48 is a different namespace — do not use it here).
+profiles:
+  image-gen:
+    gpu_type_ids:
+      - NVIDIA GeForce RTX 4090
+    workers_min: 0
+    workers_max: 1
+    idle_timeout_s: 10
+    execution_timeout_ms: 600000
+    container_disk_gb: 50
+    hourly_usd: 1.12
+  video:
+    # A40 / RTX A6000 are the 48 GB Ampere class: the cheapest no-tricks card
+    # for Wan 2.1 14B FP8 I2V at 720p/81 frames (~10-20 min/clip on 24 GB).
+    gpu_type_ids:
+      - NVIDIA A40
+      - NVIDIA RTX A6000
+    workers_min: 0
+    workers_max: 1
+    idle_timeout_s: 10
+    execution_timeout_ms: 1800000
+    container_disk_gb: 80
+    hourly_usd: 1.22
+
+flashboot: true

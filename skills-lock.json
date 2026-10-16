@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "skills": {
+    "companion-clis": {
+      "source": "runpod/runpod-plugins-official",
+      "sourceType": "github",
+      "skillPath": "plugins/runpod/skills/companion-clis/SKILL.md",
+      "computedHash": "e7e2a3bf58d8f3d75433774e5369d35035c287ad04ff2bf426c03e27b2e0fc55"
+    },
+    "cost-audit": {
+      "source": "runpod/runpod-plugins-official",
+      "sourceType": "github",
+      "skillPath": "plugins/runpod/skills/cost-audit/SKILL.md",
+      "computedHash": "2787431d80604086ae1642d2809ee20a9fa570818539adeaf0df68fc0f062a0e"
+    },
+    "discovery": {
+      "source": "runpod/runpod-plugins-official",
+      "sourceType": "github",
+      "skillPath": "plugins/runpod/skills/discovery/SKILL.md",
+      "computedHash": "f7cf4ab601e7fed9ed7bbd88242089681eee8c31259d826276bcb36310da358a"
+    },
+    "endpoint-ops": {
+      "source": "runpod/runpod-plugins-official",
+      "sourceType": "github",
+      "skillPath": "plugins/runpod/skills/endpoint-ops/SKILL.md",
+      "computedHash": "f1888433924ef3356f206de3cf36eb75e20cf272f793fded783210fe61e8900c"
+    },
+    "flash": {
+      "source": "runpod/runpod-plugins-official",
+      "sourceType": "github",
+      "skillPath": "plugins/runpod/skills/flash/SKILL.md",
+      "computedHash": "a8d127f19ec4bcdc8d96390ccee265c9b3d7857e442c02f89d400872c2c413ea"
+    },
+    "lifecycle-crud": {
+      "source": "runpod/runpod-plugins-official",
+      "sourceType": "github",
+      "skillPath": "plugins/runpod/skills/lifecycle-crud/SKILL.md",
+      "computedHash": "e7dfb8940520e4c65011ad6002c1b40d207aa0f5ef676135ffeab5444fd559c3"
+    },
+    "pod-deploy": {
+      "source": "runpod/runpod-plugins-official",
+      "sourceType": "github",
+      "skillPath": "plugins/runpod/skills/pod-deploy/SKILL.md",
+      "computedHash": "6e3363b7c0b21caee58dd72adccd646603087c85db7a58f3a8f297f0b650d762"
+    },
+    "pod-doctor": {
+      "source": "runpod/runpod-plugins-official",
+      "sourceType": "github",
+      "skillPath": "plugins/runpod/skills/pod-doctor/SKILL.md",
+      "computedHash": "1821072b4060aa25441a8154fc54e3c011cca1fd2daefd0123b0bfb1523e17a4"
+    },
+    "runpod": {
+      "source": "runpod/runpod-plugins-official",
+      "sourceType": "github",
+      "skillPath": "plugins/runpod/skills/runpod/SKILL.md",
+      "computedHash": "075c13a4f9e75597d495b3a818afb52ed8e9d43826d11bd377dd2cccf39e0148"
+    },
+    "runpod-mcp": {
+      "source": "runpod/runpod-plugins-official",
+      "sourceType": "github",
+      "skillPath": "plugins/runpod/skills/runpod-mcp/SKILL.md",
+      "computedHash": "4d332022be177f7008e131f28b7b0a9f2fbd1e8f2fc24936f90764c03cf7e59a"
+    },
+    "runpod-migrate": {
+      "source": "runpod/runpod-plugins-official",
+      "sourceType": "github",
+      "skillPath": "plugins/runpod/skills/runpod-migrate/SKILL.md",
+      "computedHash": "0354dacad763871b253d10615151565d5bf8b92a8dfce227c2285fec930d82f5"
+    },
+    "runpod-templates": {
+      "source": "runpod/runpod-plugins-official",
+      "sourceType": "github",
+      "skillPath": "plugins/runpod/skills/runpod-templates/SKILL.md",
+      "computedHash": "ee04ff0d77278a7cfb03172d75c792b878bb7f554948a74d0c5d1210854376b4"
+    },
+    "runpod-usage": {
+      "source": "runpod/runpod-plugins-official",
+      "sourceType": "github",
+      "skillPath": "plugins/runpod/skills/runpod-usage/SKILL.md",
+      "computedHash": "5eef3fb41b39c407de3b65e59e712d93b18807eb506fd21b41218e79d7d5b949"
+    },
+    "runpodctl": {
+      "source": "runpod/runpod-plugins-official",
+      "sourceType": "github",
+      "skillPath": "plugins/runpod/skills/runpodctl/SKILL.md",
+      "computedHash": "43e54b5e89c70570f40b5942547b00563bde8043185e8ce83035aa278b178bcc"
+    },
+    "serverless-deploy": {
+      "source": "runpod/runpod-plugins-official",
+      "sourceType": "github",
+      "skillPath": "plugins/runpod/skills/serverless-deploy/SKILL.md",
+      "computedHash": "d43123bc32e0bf8c51c676daa5a25d5a8b230b516a390a7ec1fe7c09b596fc05"
+    }
+  }
+}

@@ -77,6 +77,38 @@ seated at a modern desk, soft studio lighting, high quality
 - **Motion keywords**: Include camera/subject motion description
 - **Length**: Same as base model
 
+### Krea 2 (K2)
+
+- **Style**: Descriptive paragraph, multi-sentence natural prose. Matches the Chinese/Japanese multi-sentence style in darkbeast-style training data on Civitai — *not* SDXL quality tags.
+- **CFG**: 1.0 (distilled). Bumping to 3–4 overcooks/oversaturates.
+- **Quality tags**: Skip. K2 was trained on plain descriptive paragraphs.
+- **Length**: 60–120 words.
+- **Structure**: `subject + body details + scene + lighting + camera/lens`. End with photographic terms (`RAW photo quality`, `85mm portrait lens`, `film grain`) for style.
+- **Negative**: Keep minimal — `blurry, low quality, deformed, bad anatomy, watermark, text, signature, jpeg artifacts`. Heavy negative prompts interfere with the distillation.
+
+**Good K2 prompt:**
+```
+Photorealistic photograph of a slim, petite shemale with long hair, soft feminine face,
+small breasts, lean athletic body, small flaccid penis, fully nude, washing a red sedan
+car on a sunlit suburban driveway. She is standing with her legs spread wide apart,
+leaning slightly forward toward the car. Her hands are wet and soapy, holding a yellow
+sponge pressed against the side door of a red sedan, water and soap suds dripping down
+the car body. She is smiling naturally at the camera, hair down, sunlit skin with subtle
+freckles. Anatomically correct realistic human anatomy, natural proportions, smooth skin,
+no exaggerated features. Bright midday sun from the upper left casting sharp natural
+shadows on the concrete driveway, green lawn and a wooden fence visible in the background.
+Shot from a low waist-level angle looking slightly up at her. Hyperdetailed skin texture,
+water droplets catching the light, photorealistic lighting and reflections, 8k uhd, RAW
+photo quality, shallow depth of field, 85mm portrait lens, film grain.
+```
+
+**Bad K2 prompt (SDXL tag-style — wrong format):**
+```
+masterpiece, best quality, 8k uhd, photorealistic, RAW photo, a young woman with wet
+hands washing a car, wearing a cropped tank top and high-waisted blue jeans, soap suds
+on her arms...
+```
+
 ## With Identity Methods
 
 ### InstantID Prompts

@@ -26,12 +26,14 @@
 python main.py --listen
 ```
 
-- Use the default flags. `--highvram` is not appropriate for a 16 GB card: it keeps models resident and causes OOM.
+- Use the default flags. `--highvram` is not appropriate for a 16 GB card: it
+  keeps models resident and causes OOM.
 - `--fp8_e4m3fn-unet` is optional, for Flux workflows.
 
 ## Performance Tips
 
-- Queue jobs sequentially. Parallel batches of 4x 1024x1024 do not fit in 16.7 GB.
+- Queue jobs sequentially. Parallel batches of 4x 1024x1024 do not fit in 16.7
+  GB.
 - Enable tiled VAE for large upscales.
 - Use fp8 checkpoints for Flux when other models are resident.
 - cuDNN 8800+ recommended for maximum throughput.

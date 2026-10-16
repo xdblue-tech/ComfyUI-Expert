@@ -2,10 +2,12 @@
 
 ## Prerequisites
 
-- Any [AgentSkills](https://agentskills.io)-compatible agent that can read this repository.
+- Any [AgentSkills](https://agentskills.io)-compatible agent that can read this
+  repository.
 - Python 3.9 or newer.
 - ComfyUI running locally or at a reachable remote URL.
-- [FFmpeg](https://ffmpeg.org/) is optional and needed only for local video assembly.
+- [FFmpeg](https://ffmpeg.org/) is optional and needed only for local video
+  assembly.
 
 ## Quick start
 
@@ -16,7 +18,10 @@ python3 scripts/scan_inventory.py          # first run / after installing models
 # now open your agent in this directory and ask for what you want
 ```
 
-`session.py` accepts `--project NAME` to set an active project and `--comfyui-url URL` to check a non-default ComfyUI endpoint. `scan_inventory.py` tries the configured ComfyUI URL first, then can scan an on-disk installation when given `--comfyui-path PATH`.
+`session.py` accepts `--project NAME` to set an active project and
+`--comfyui-url URL` to check a non-default ComfyUI endpoint. `scan_inventory.py`
+tries the configured ComfyUI URL first, then can scan an on-disk installation
+when given `--comfyui-path PATH`.
 
 ## Example prompts
 
