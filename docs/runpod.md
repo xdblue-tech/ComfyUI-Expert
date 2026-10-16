@@ -6,7 +6,7 @@ runpodctl required.
 
 ```
 workflow.json ──► bake image ──► push to Hub ──► create endpoint ──► submit jobs ──► outputs
-                    rp_images.py                  rp_endpoints.py     rp_submit.py    state/output/
+                    rp_images.py                  rp_endpoints.py     rp_submit.py    output/
 ```
 
 ## One-time setup (already done on this machine)
@@ -94,7 +94,7 @@ python3 scripts/rp_submit.py --endpoint unholy-sdxl \
 python3 scripts/rp_submit.py --endpoint unholy-sdxl --workflow wf.json --dry-run
 ```
 
-Outputs land in `state/output/<job-id>/` (or `projects/<p>/output/<job-id>/` with
+Outputs land in `output/<job-id>/` (or `projects/<p>/output/<job-id>/` with
 `--project`), next to `job.json` and `result.json`.
 
 Timing: first job on a fresh host pays a ~4 min cold start (image pull); after that,
@@ -125,7 +125,7 @@ image jobs take ~30 s to start + ~17 s to generate at 832×1216, 30 steps.
 |---|---|
 | `state/images.json` | built/pushed tags, digests, sizes |
 | `state/endpoints.json` | endpoint ids, worker bounds, drift status |
-| `state/output/<job-id>/` | job metadata, raw response, extracted images/videos |
+| `output/<job-id>/` | job metadata, raw response, extracted images/videos |
 
 ## Related
 

@@ -14,7 +14,7 @@ tools and no runpodctl required.
 | --- | --- | --- |
 | Build/push images | `scripts/rp_images.py` | `state/images.json` |
 | Register/sync endpoints | `scripts/rp_endpoints.py` | `state/endpoints.json` |
-| Produce (submit workflows) | `scripts/rp_submit.py` | `state/output/<job-id>/` or `projects/<p>/output/<job-id>/` |
+| Produce (submit workflows) | `scripts/rp_submit.py` | `output/<job-id>/` or `projects/<p>/output/<job-id>/` |
 
 Config: `config/rp.yaml` (Docker namespace, `comfyui_models_path`, base image, API key
 file, per-profile GPU ids, worker bounds, timeouts). Read it before acting; every
@@ -136,7 +136,7 @@ the digest, size, and image creation time.
    `projects/<p>/workflows/`), validated against `state/inventory.json` and, on the
    remote side, against the models baked into the image.
 2. `python3 scripts/rp_submit.py --endpoint comfyui-video-wan --workflow <path.json> --wait`
-3. Outputs land in `state/output/<job-id>/` (or `projects/<p>/output/<job-id>/` with
+3. Outputs land in `output/<job-id>/` (or `projects/<p>/output/<job-id>/` with
    `--project`), next to `job.json` (job metadata) and `result.json` (the worker's raw
    response, written before extraction, so an unrecognized output shape or a failed
    download is still recoverable). Failed extraction exits 1; a response with no

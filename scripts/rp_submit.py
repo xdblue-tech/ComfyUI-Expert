@@ -270,7 +270,7 @@ def poll(endpoint_id, job_id, key, timeout_s):
 def output_dir(project, job_id):
     if project:
         return REPO_ROOT / "projects" / project / "output" / job_id
-    return REPO_ROOT / "state" / "output" / job_id
+    return REPO_ROOT / "output" / job_id
 
 
 def submit(args, config, state):

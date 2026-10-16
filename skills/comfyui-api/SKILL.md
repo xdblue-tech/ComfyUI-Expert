@@ -111,8 +111,12 @@ curl http://127.0.0.1:8188/history/abc-123-def
 
 ### Retrieve Output Image
 
+Save downloaded outputs under `output/` in the repo root (git-untracked), never under
+`state/` — state is for machine-readable registry files only:
+
 ```bash
-curl "http://127.0.0.1:8188/view?filename=ComfyUI_00001.png&subfolder=&type=output" -o output.png
+mkdir -p output
+curl "http://127.0.0.1:8188/view?filename=ComfyUI_00001.png&subfolder=&type=output" -o output/ComfyUI_00001.png
 ```
 
 ### Upload Reference Image
