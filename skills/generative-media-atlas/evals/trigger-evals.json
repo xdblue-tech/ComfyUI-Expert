@@ -1,0 +1,23 @@
+[
+  {"query": "ok so I need to pick a model for a client project - realistic product shots with a human model holding the product, and the images go on their website so it's commercial. what do I use?", "should_trigger": true},
+  {"query": "whats the easiest model to train character loras on right now? ive done a few on sdxl ages ago but everything's changed", "should_trigger": true},
+  {"query": "z-image vs krea 2 vs flux.2 for skin texture. which one actually wins", "should_trigger": true},
+  {"query": "I've got a 3060 with 12gb. realistically what open image and video models can I run locally without it being miserable", "should_trigger": true},
+  {"query": "we're a 6 person studio in dublin building a product that runs image models on our own servers. which open weights can we legally ship inside that", "should_trigger": true},
+  {"query": "best open model for nsfw video generation these days? been using wan 2.2 but people keep mentioning h3", "should_trigger": true},
+  {"query": "I want to make realistic photos of a character I invented, then have her move, running everything on runpod. no idea where to start or what to install", "should_trigger": true},
+  {"query": "which video model can generate audio at the same time as the video, and is there a catch", "should_trigger": true},
+  {"query": "i installed flux-2 from your repo and it keeps pointing me at character-lora-training which i dont have. do i need to install every single one", "should_trigger": true},
+  {"query": "need in-image text that isn't garbled for a poster series. i've tried sdxl and flux and both mangle it", "should_trigger": true},
+
+  {"query": "my flux.2 render came out fried and oversaturated after the hires pass. what denoise should the second pass be at", "should_trigger": false},
+  {"query": "comfyui on my runpod pod can't see any of my loras. the folder's definitely on the network volume, i can ls it", "should_trigger": false},
+  {"query": "what rank and alpha should I use for a z-image character lora with 24 training images", "should_trigger": false},
+  {"query": "write me the danbooru tag string for a chibi character in a maid outfit for anima, i keep getting the artist tag wrong", "should_trigger": false},
+  {"query": "explain what a VAE actually does in a diffusion pipeline, conceptually. I'm writing a blog post", "should_trigger": false},
+  {"query": "my wan 2.2 i2v output goes slow motion whenever I use the lightx2v speed lora. how do I fix that specifically", "should_trigger": false},
+  {"query": "which llm should I use for a customer support agent - claude, gpt or gemini? cost matters", "should_trigger": false},
+  {"query": "compare the pricing tiers on the ideogram hosted api vs running the open weights myself for about 20k images a month", "should_trigger": false},
+  {"query": "set up a github action that runs our comfyui workflow on every push and posts the output image to slack", "should_trigger": false},
+  {"query": "what's the exact node name for loading the minimax h3 audio vae, mine only shows one vae loader", "should_trigger": false}
+]

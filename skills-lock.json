@@ -31,11 +31,35 @@
       "skillPath": "plugins/runpod/skills/flash/SKILL.md",
       "computedHash": "a8d127f19ec4bcdc8d96390ccee265c9b3d7857e442c02f89d400872c2c413ea"
     },
+    "flux-2": {
+      "source": "ryannel/skills",
+      "sourceType": "github",
+      "skillPath": "skills/generative-media/flux-2/SKILL.md",
+      "computedHash": "38e1d165817e24259aa77ed5d4d2fa3b259095e12e0106d013c9cbbb18739bf9"
+    },
+    "generative-media-atlas": {
+      "source": "ryannel/skills",
+      "sourceType": "github",
+      "skillPath": "skills/generative-media/generative-media-atlas/SKILL.md",
+      "computedHash": "7e23e8ea2dc49a33d6d9bfe9c19de0d4e6224a9c70342d6f60eeedc8960c2cde"
+    },
+    "krea-2": {
+      "source": "ryannel/skills",
+      "sourceType": "github",
+      "skillPath": "skills/generative-media/krea-2/SKILL.md",
+      "computedHash": "b2c7b5eae9f1a30fe0510b979ce00f6e8936ead5f45c3cae1a940bc46c922933"
+    },
     "lifecycle-crud": {
       "source": "runpod/runpod-plugins-official",
       "sourceType": "github",
       "skillPath": "plugins/runpod/skills/lifecycle-crud/SKILL.md",
       "computedHash": "e7dfb8940520e4c65011ad6002c1b40d207aa0f5ef676135ffeab5444fd559c3"
+    },
+    "nsfw-prompt": {
+      "source": "haremank/nsfw-prompt",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "67135180b8b6e5b69da3855f7dd529233a43dd68361fa4e85e44ed780a3af7aa"
     },
     "pod-deploy": {
       "source": "runpod/runpod-plugins-official",
@@ -48,6 +72,12 @@
       "sourceType": "github",
       "skillPath": "plugins/runpod/skills/pod-doctor/SKILL.md",
       "computedHash": "1821072b4060aa25441a8154fc54e3c011cca1fd2daefd0123b0bfb1523e17a4"
+    },
+    "qwen-image": {
+      "source": "ryannel/skills",
+      "sourceType": "github",
+      "skillPath": "skills/generative-media/qwen-image/SKILL.md",
+      "computedHash": "46eec9cecf3ec9aaabeb3546d8ea0ee7dde9cadf9dbc353466fc4d98454c48ce"
     },
     "resemble-chatterbox": {
       "source": "calesthio/generative-media-skills",
@@ -91,11 +121,23 @@
       "skillPath": "plugins/runpod/skills/runpodctl/SKILL.md",
       "computedHash": "43e54b5e89c70570f40b5942547b00563bde8043185e8ce83035aa278b178bcc"
     },
+    "sdxl": {
+      "source": "ryannel/skills",
+      "sourceType": "github",
+      "skillPath": "skills/generative-media/sdxl/SKILL.md",
+      "computedHash": "6a4acbb6ef8c1eb16a5ca07377f66d8f28608b41be2fe7cd996850a6ec51997a"
+    },
     "serverless-deploy": {
       "source": "runpod/runpod-plugins-official",
       "sourceType": "github",
       "skillPath": "plugins/runpod/skills/serverless-deploy/SKILL.md",
       "computedHash": "d43123bc32e0bf8c51c676daa5a25d5a8b230b516a390a7ec1fe7c09b596fc05"
+    },
+    "z-image": {
+      "source": "ryannel/skills",
+      "sourceType": "github",
+      "skillPath": "skills/generative-media/z-image/SKILL.md",
+      "computedHash": "e364fb9e76640964dca0d2c82f401d51567004b9939f1e6dc819037f619d48fc"
     }
   }
 }

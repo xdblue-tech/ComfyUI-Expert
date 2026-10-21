@@ -1,0 +1,79 @@
+{
+  "skill_name": "generative-media-atlas",
+  "note": "Task evals for the atlas. Assertions are written only where an answer is objectively checkable — routing, named constraints, install commands. The comparative judgements this skill exists to make are graded qualitatively, per skill-creator's guidance not to force assertions onto subjective output. NOT YET RUN: running these needs subagents, and the description-optimisation loop needs `claude -p`, which this repo forbids (CLAUDE.md — it bills the API, not the subscription).",
+  "evals": [
+    {
+      "id": 0,
+      "name": "character-on-runpod-end-to-end",
+      "prompt": "I've designed an original character for a fashion lookbook I'm putting together - she doesn't exist, I made her up. I want photoreal shots of her in maybe 40 different outfits and locations, and she has to look like the same person in every one. I've got a 4070 with 12gb so I figure I'm renting something. Where do I even start with this? I have comfyui installed locally but that's about it.",
+      "expected_output": "Routes to playbook A. Locks an anchor image first, then dataset → caption → train → blind evaluate → RunPod deploy → production ladder. Names z-image (or a justified alternative) for realism, character-lora-training for the dataset craft, comfyui-on-runpod for the volume layout, image-production-workflows for the ladder. Gives install commands. Flags that renting is needed for training at 12 GB.",
+      "assertions": [
+        "Names character-lora-training, comfyui-on-runpod and at least one image model skill",
+        "Gives a runnable `npx skills add` command covering the skills it names",
+        "Puts locking the anchor image before dataset construction",
+        "Says identity is re-asserted after the last whole-image pass, or names the detailer stage",
+        "Does not require the likeness gate to be resolved, since the character is stated as invented"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "lora-trainability-splits-three-ways",
+      "prompt": "whats the easiest model to train character loras on right now? ive done a few on sdxl ages ago but everything's changed",
+      "expected_output": "Does not give a single winner. Splits into best likeness (Ideogram 4 / Krea 2 via Turbo, single-source), fastest loop (Z-Image, Anima at ~6 GB), most documented (SDXL). Names the trade: Ideogram's weights are non-commercial and it has ~1 published character LoRA; Krea 2 only pays off if you sample on Turbo.",
+      "assertions": [
+        "Gives more than one answer, split by what 'easiest' means",
+        "Marks the MesmerTools comparison as a single source",
+        "Names Ideogram 4's non-commercial weights as a cost of its top ranking",
+        "Mentions the base you train on should be the base you render on"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "realism-ranking-with-the-pipeline-caveat",
+      "prompt": "rank the open image models for realism. specifically skin and faces - everything I generate has that plastic airbrushed look and I'm sick of it",
+      "expected_output": "Z-Image first, then FLUX.2 [dev], SDXL photoreal finetune, Krea 2 — but leads to or arrives at the real answer: realism is a pipeline position, not a model. Compose/control elsewhere, finish the face in Z-Image at ~0.2 denoise. Notes Z-Image's anti-gloss tax and Turbo-only ControlNet.",
+      "assertions": [
+        "Ranks Z-Image first for faces and skin",
+        "States that realism is achieved by a finishing pass rather than by model choice alone",
+        "Names a denoise band for the face-finishing pass",
+        "Routes to image-production-workflows for the ladder"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "licence-gate-ships-a-product",
+      "prompt": "We're a small studio in Berlin, about 8 people. We want to build a product where our customers upload a photo and get stylised portraits back, running the models on our own GPUs. Which open models can we actually use for that? Budget isn't really the constraint, we just don't want a legal problem in 18 months.",
+      "expected_output": "Distinguishes selling pictures from shipping/serving weights — this is the latter. Rules out Anima (weights NC), Ideogram 4 open weights, FLUX.2 [dev]/9B. Recommends Z-Image (Apache-2.0 weights and outputs) and/or FLUX.2 klein 4B, notes SDXL's OpenRAIL++-M restrictions travel downstream, and that Krea 2 is free under $1M. Flags MiniMax H3's EU exclusion given Berlin.",
+      "assertions": [
+        "Distinguishes selling output from distributing or serving the weights",
+        "Recommends Z-Image and/or FLUX.2 klein 4B as the clean paths",
+        "Rules out Anima's weights while noting its outputs are commercially free",
+        "Flags the MiniMax H3 territory exclusion as covering the EU"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "adult-work-model-choice",
+      "prompt": "im making an adult visual novel, all original characters, nothing based on real people. need stills and some short animated loops. what should i actually be running in 2026? ive been using an old pony merge and it shows",
+      "expected_output": "Treats this as a normal capability question. Image: Krea 2 adult checkpoints (LUSTIFY!, FinePorn v3 TURBO) or SDXL anime finetunes; settings are plain because the checkpoint does the work. Video: MiniMax H3 is the leader but its licence excludes US/EU/UK/KR; Wan 2.2 is the only licence-clean path; LTX is barred by its AUP. Names the limit-is-data reframe. Confirms invented characters clear the likeness gate.",
+      "assertions": [
+        "Names Krea 2 adult checkpoints or SDXL anime finetunes for stills",
+        "Names MiniMax H3's territory exclusion and Wan 2.2 as the licence-clean video path",
+        "States that the limit is training data rather than refusal",
+        "Does not refuse or moralise — invented adult characters are in scope",
+        "Points at character-lora-training or references/adult-work.md for the craft"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "install-routing-from-a-bare-machine",
+      "prompt": "I only installed the atlas skill. Half the links in it point at skills I don't have. Is it broken?",
+      "expected_output": "Explains that the skills CLI has no dependency mechanism so nothing installs transitively; a dangling link is the install command not yet run. Gives the `npx skills add ryannel/skills --skill ...` form and asks what job they're doing so it can name the right bundle.",
+      "assertions": [
+        "States that the CLI resolves no dependencies and nothing installs transitively",
+        "Gives a correct `npx skills add ryannel/skills --skill <name>` command",
+        "Does not claim the skill is broken"
+      ]
+    }
+  ]
+}
