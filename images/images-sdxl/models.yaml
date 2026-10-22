@@ -5,9 +5,9 @@
 # COPY lines — `python3 scripts/rp_images.py build --check` fails if the two drift.
 
 checkpoints:
-  - unholyDesireMixSinister_v80.safetensors
+  - unholyDesireMixSinister_v90.safetensors
 loras:
-  - cinematic photography detailed illu xl v5.safetensors
+  - rimixxO2.safetensors
 
 # Workflows this image is baked for. `build --check` verifies every model file
 # their Loader nodes reference is present in the manifest above.

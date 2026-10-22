@@ -21,10 +21,10 @@
 schema: 1
 model_family: sdxl
 model_info:
-  checkpoint: unholyDesireMixSinister_v80.safetensors
+  checkpoint: unholyDesireMixSinister_v90.safetensors
   trigger_word: ""
-  lora: cinematic photography detailed illu xl v5.safetensors
-  lora_strength: 0.8
+  lora: rimixxO2.safetensors
+  lora_strength: 1.0
   base_prompt: ""
 positive:
   node: "2"

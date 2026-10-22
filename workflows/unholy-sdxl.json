@@ -1,7 +1,7 @@
 {
   "1": {
     "inputs": {
-      "ckpt_name": "unholyDesireMixSinister_v80.safetensors"
+      "ckpt_name": "unholyDesireMixSinister_v90.safetensors"
     },
     "class_type": "CheckpointLoaderSimple",
     "_meta": {
@@ -106,9 +106,9 @@
   },
   "10": {
     "inputs": {
-      "lora_name": "cinematic photography detailed illu xl v5.safetensors",
-      "strength_model": 0.8,
-      "strength_clip": 0.8,
+      "lora_name": "rimixxO2.safetensors",
+      "strength_model": 1.0,
+      "strength_clip": 1.0,
       "model": [
         "1",
         0

@@ -11,6 +11,6 @@
 
 FROM runpod/worker-comfyui:5.10.0-base-cuda12.8.1
 
-COPY checkpoints/unholyDesireMixSinister_v80.safetensors /comfyui/models/checkpoints/
+COPY checkpoints/unholyDesireMixSinister_v90.safetensors /comfyui/models/checkpoints/
 
-COPY ["loras/cinematic photography detailed illu xl v5.safetensors", "/comfyui/models/loras/"]
+COPY loras/rimixxO2.safetensors /comfyui/models/loras/

@@ -5,7 +5,7 @@ Pick 1–3 phrases per slot. Do not dump a whole section into the prompt.
 ## Subject
 
 ```
-22-year-old Japanese woman, adult, beautiful detailed face
+20-year-old Japanese woman, adult, beautiful detailed face
 office lady, nurse, maid, idol, wife, adult school-uniform roleplay
 1girl, solo | 1boy, 1girl | 2girls, lesbian
 mature woman (30s), slender, curvy, petite adult
