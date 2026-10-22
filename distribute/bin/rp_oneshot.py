@@ -8,8 +8,11 @@ template -> endpoint id mapping. The RunPod API key comes from the RUNPOD_API_KE
 environment variable ONLY — never a file.
 
 Override flags are applied at the manifest-declared nodes, so callers never
-hand-edit the workflow JSON. RunPod caps the whole request body (not one file):
-10 MB for /run and 20 MB for /runsync, shared by the workflow and every
+hand-edit the workflow JSON. Everything is validated before a request leaves the
+machine: template, endpoint mapping, seed range, dimensions (positive, multiple
+of 8), and image input support (manifest templates declare an `image` node only
+when the workflow accepts one). RunPod caps the whole request body (not one
+file): 10 MB for /run and 20 MB for /runsync, shared by the workflow and every
 base64-embedded input image.
 
 Usage:
@@ -49,24 +52,42 @@ RUNPOD_JOB_BASE = "https://api.runpod.ai/v2"
 MAX_RUN_REQUEST_BYTES = 10 * 1024 * 1024
 MAX_RUNSYNC_REQUEST_BYTES = 20 * 1024 * 1024
 POLL_SECONDS = 5
+MAX_DIMENSION = 16384
+DIMENSION_STEP = 8
 TERMINAL_STATES = {"COMPLETED", "FAILED", "CANCELLED", "TIMED_OUT"}
 OUTPUT_KEYS = ("images", "videos", "gifs", "audio", "files")
 DEFAULT_EXTENSIONS = {"images": ".png", "videos": ".mp4", "gifs": ".gif", "audio": ".wav"}
 RETRIES = 2
+# Fixed markers the host bridge parses. Change them and bridge.py must change too:
+# a wrong guess here can make a caller submit a second billable job.
+SUBMISSION_ACCEPTED = "[info] job {job_id} accepted"
+SUBMISSION_UNKNOWN = "submission outcome is UNKNOWN"
 
 
 class OneshotError(Exception):
     """User-facing error; the message names the fix."""
 
 
-def load_json(path):
+def load_json(path, label="file"):
     try:
         return json.loads(Path(path).read_text(encoding="utf-8"))
     except FileNotFoundError:
-        raise OneshotError(f"missing {path} — the package is incomplete; "
+        raise OneshotError(f"missing {label} {path} — the package is incomplete; "
                            "get a fresh copy from the maintainer")
     except ValueError as exc:
-        raise OneshotError(f"{path} is not valid JSON: {exc}")
+        raise OneshotError(f"{label} {path} is not valid JSON: {exc}")
+
+
+def require_mapping(data, label, path):
+    if not isinstance(data, dict):
+        raise OneshotError(f"{label} {path} must be a JSON object, got "
+                           f"{type(data).__name__}")
+    return data
+
+
+def _http_open(target, timeout):
+    """The single network seam. Tests replace it to exercise the real logic offline."""
+    return urllib.request.urlopen(target, timeout=timeout)
 
 
 def http_json(method, url, payload=None, key=None, timeout=120, retry=True):
@@ -80,15 +101,24 @@ def http_json(method, url, payload=None, key=None, timeout=120, retry=True):
             request.add_header("Content-Type", "application/json")
             if key:
                 request.add_header("Authorization", f"Bearer {key}")
-            with urllib.request.urlopen(request, timeout=timeout) as response:
-                return json.loads(response.read().decode("utf-8"))
+            with _http_open(request, timeout=timeout) as response:
+                raw = response.read().decode("utf-8", "replace")
         except urllib.error.HTTPError as exc:
             body = exc.read().decode("utf-8", "replace")[:300]
+            if exc.code in (401, 403):
+                raise OneshotError(
+                    f"authentication failed (HTTP {exc.code}) on {method} {url}: {body} — "
+                    "check that RUNPOD_API_KEY is the right key for this endpoint"
+                )
             if retry and 500 <= exc.code < 600 and attempt < RETRIES:
                 last_error = f"HTTP {exc.code}: {body}"
                 continue
-            raise OneshotError(f"HTTP {exc.code} on {method} {url}: {body}")
-        except (urllib.error.URLError, TimeoutError) as exc:
+            # A server-side failure on a POST can still have enqueued the job.
+            outcome = ""
+            if payload is not None and exc.code >= 500:
+                outcome = f" — {SUBMISSION_UNKNOWN}"
+            raise OneshotError(f"HTTP {exc.code} on {method} {url}: {body}{outcome}")
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
             if retry and attempt < RETRIES:
                 last_error = str(exc)
                 time.sleep(2 * (attempt + 1))
@@ -96,9 +126,21 @@ def http_json(method, url, payload=None, key=None, timeout=120, retry=True):
             if payload is not None:
                 raise OneshotError(
                     f"network error submitting to {url}: {exc} — the job MAY have been "
-                    "accepted anyway; check the endpoint's jobs on RunPod before rerunning"
+                    "accepted anyway; check the endpoint's jobs on RunPod before rerunning "
+                    f"— {SUBMISSION_UNKNOWN}"
                 )
             raise OneshotError(f"network error on {method} {url}: {exc}")
+        try:
+            return json.loads(raw)
+        except ValueError as exc:
+            outcome = ""
+            if payload is not None:
+                outcome = (
+                    f" — {SUBMISSION_UNKNOWN}; check the endpoint's jobs before rerunning"
+                )
+            raise OneshotError(
+                f"malformed JSON from {method} {url}: {exc}; body starts {raw[:120]!r}{outcome}"
+            )
     raise OneshotError(f"retries exhausted on {method} {url}: {last_error}")
 
 
@@ -106,29 +148,69 @@ def set_input(graph, node_id, field, value):
     if node_id not in graph:
         raise OneshotError(f"node {node_id!r} not in the template — check "
                            "manifest.json override nodes")
-    graph[node_id]["inputs"][field] = value
+    inputs = graph[node_id].get("inputs")
+    if not isinstance(inputs, dict):
+        raise OneshotError(f"node {node_id!r} has no inputs object — check "
+                           "manifest.json override nodes")
+    inputs[field] = value
+
+
+def parse_seed(raw):
+    """Return a concrete seed; reject anything that is not an integer in range."""
+    if raw in (None, "random"):
+        return random.randint(0, 2**48)
+    text = str(raw).strip()
+    if not re.fullmatch(r"[0-9]+", text):
+        raise OneshotError(
+            f"--seed {raw!r}: expected a non-negative integer or 'random'"
+        )
+    seed = int(text)
+    if seed >= 2**64:
+        raise OneshotError(f"--seed {seed}: must be 0..{2**64 - 1}")
+    return seed
+
+
+def validate_dimension(flag, value):
+    if value is None:
+        return
+    if value <= 0 or value > MAX_DIMENSION:
+        raise OneshotError(
+            f"{flag} {value}: must be between 1 and {MAX_DIMENSION} pixels"
+        )
+    if value % DIMENSION_STEP:
+        raise OneshotError(
+            f"{flag} {value}: must be a multiple of {DIMENSION_STEP} pixels"
+        )
 
 
 def apply_overrides(workflow, meta, args):
     """Apply --prompt/--negative/--seed/--width/--height/--set at manifest nodes."""
-    for section, attr in (("positive", "prompt"), ("negative", "negative")):
+    for section, attr, flag in (("positive", "prompt", "--prompt"),
+                                ("negative", "negative", "--negative")):
         text = getattr(args, attr)
         if text is not None:
             spec = meta.get(section) or {}
-            set_input(workflow, spec.get("node"), spec.get("field", "text"), text)
+            if not spec.get("node"):
+                raise OneshotError(
+                    f"{flag}: template {args.template!r} declares no {section} node "
+                    "in manifest.json"
+                )
+            set_input(workflow, spec["node"], spec.get("field", "text"), text)
     if args.seed is not None or (meta.get("default_seed_policy") == "random"):
         spec = meta.get("seed") or {}
-        if args.seed in (None, "random"):
-            seed = random.randint(0, 2**48)
-        else:
-            seed = int(args.seed)
-            if not 0 <= seed < 2**64:
-                raise OneshotError(f"--seed {seed}: must be 0..{2**64 - 1}")
-        set_input(workflow, spec.get("node"), spec.get("field", "seed"), seed)
+        if not spec.get("node"):
+            raise OneshotError(
+                f"--seed: template {args.template!r} declares no seed node in manifest.json"
+            )
+        set_input(workflow, spec["node"], spec.get("field", "seed"),
+                  parse_seed(args.seed))
     if args.width is not None or args.height is not None:
         spec = meta.get("size") or {}
         if not spec.get("node"):
-            raise OneshotError("--width/--height: this template declares no size node")
+            raise OneshotError(
+                f"--width/--height: template {args.template!r} declares no size node in "
+                "manifest.json"
+            )
         if args.width is not None:
             set_input(workflow, spec["node"], spec.get("width_field", "width"), args.width)
         if args.height is not None:
@@ -180,31 +262,39 @@ def describe_output(item):
     data = item.get("data") or item.get("image")
     if str(item.get("type", "")).lower() == "s3_url":
         return {"filename": filename, "url": data} if data else None
-    if data:
-        return {"filename": filename, "data": data}
+    if "data" in item or "image" in item:
+        return {"filename": filename, "data": data if data is not None else ""}
     return None
 
 
+def _empty_entry(item):
+    """Keep the reported filename when an entry carries neither data nor a URL."""
+    name = (item.get("filename") or item.get("name")) if isinstance(item, dict) else None
+    return {"filename": name}
+
+
 def collect_outputs(output):
-    """All recognized artifacts from a worker response, tagged with key/index."""
+    """Every artifact entry from a worker response, tagged with key/index.
+
+    Entries that carry neither data nor a URL are kept so the caller reports
+    them instead of silently dropping part of the response.
+    """
     items = []
     if isinstance(output, dict):
         for key in OUTPUT_KEYS:
             for index, item in enumerate(output.get(key) or []):
-                described = describe_output(item)
-                if described:
-                    described.setdefault("key", key)
-                    described.setdefault("index", index)
-                    items.append(described)
+                described = describe_output(item) or _empty_entry(item)
+                described.setdefault("key", key)
+                described.setdefault("index", index)
+                items.append(described)
         if not items and "output" in output:
             return collect_outputs(output["output"])
     elif isinstance(output, list):
         for index, item in enumerate(output):
-            described = describe_output(item)
-            if described:
-                described.setdefault("key", "output")
-                described.setdefault("index", index)
-                items.append(described)
+            described = describe_output(item) or _empty_entry(item)
+            described.setdefault("key", "output")
+            described.setdefault("index", index)
+            items.append(described)
     return items
 
 
@@ -231,19 +321,37 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.timeout_s <= 0:
         raise OneshotError(f"--timeout-s {args.timeout_s}: must be positive")
+    validate_dimension("--width", args.width)
+    validate_dimension("--height", args.height)
 
-    manifest = load_json(MANIFEST_PATH)
-    endpoints = load_json(ENDPOINTS_PATH)
-    templates = manifest.get("templates") or {}
+    manifest = require_mapping(load_json(MANIFEST_PATH, "manifest"),
+                               "manifest", MANIFEST_PATH)
+    endpoints = require_mapping(load_json(ENDPOINTS_PATH, "endpoint snapshot"),
+                                "endpoint snapshot", ENDPOINTS_PATH)
+    templates = manifest.get("templates")
+    if not isinstance(templates, dict) or not templates:
+        raise OneshotError(f"manifest {MANIFEST_PATH} has no 'templates' object — "
+                           "the package is incomplete")
     if args.template not in templates:
-        raise SystemExit(
-            f"unknown template {args.template!r}; shipped: {', '.join(sorted(templates)) or '(none)'}"
+        raise OneshotError(
+            f"unknown template {args.template!r}; shipped: "
+            f"{', '.join(sorted(templates)) or '(none)'}"
         )
     if args.template not in endpoints:
         raise OneshotError(f"no endpoint recorded for template {args.template!r} — "
                            "get a refreshed package from the maintainer")
     meta = templates[args.template]
-    workflow = load_json(WORKFLOWS_DIR / f"{args.template}.json")
+    if not isinstance(meta, dict):
+        raise OneshotError(f"manifest template {args.template!r} must be a JSON object")
+    if args.image and not (meta.get("image") or {}).get("node"):
+        raise OneshotError(
+            f"--image: template {args.template!r} is text-only — manifest.json declares "
+            "no image node for it; drop --image or use a template that accepts one"
+        )
+    workflow = load_json(WORKFLOWS_DIR / f"{args.template}.json",
+                         f"workflow for template {args.template!r}")
+    if not isinstance(workflow, dict):
+        raise OneshotError(f"workflow for template {args.template!r} must be a JSON object")
     apply_overrides(workflow, meta, args)
 
     limit = MAX_RUNSYNC_REQUEST_BYTES if args.sync else MAX_RUN_REQUEST_BYTES
@@ -264,23 +372,36 @@ def main(argv=None):
             )
         return 0
 
+    if oversized:
+        raise OneshotError(
+            f"request body is {len(encoded)} bytes; the {route} cap is {limit} — "
+            "shrink input images or pass URLs"
+        )
+    endpoint_entry = endpoints[args.template]
+    if not isinstance(endpoint_entry, dict) or not endpoint_entry.get("endpoint_id"):
+        raise OneshotError(f"no endpoint recorded for template {args.template!r} — "
+                           "get a refreshed package from the maintainer")
+    endpoint_id = endpoint_entry["endpoint_id"]
+
     api_key = os.environ.get("RUNPOD_API_KEY")
     if not api_key:
         print("[FAIL] RUNPOD_API_KEY is not set — export it before running jobs",
               file=sys.stderr)
         return 2
 
-    endpoint_id = endpoints[args.template]["endpoint_id"]
-    if oversized:
-        raise OneshotError(
-            f"request body is {len(encoded)} bytes; the {route} cap is {limit} — "
-            "shrink input images or pass URLs"
-        )
     submitted = http_json("POST", f"{RUNPOD_JOB_BASE}/{endpoint_id}/{route}",
                           envelope, key=api_key, retry=False)
+    if not isinstance(submitted, dict):
+        raise OneshotError(
+            f"submission response from {RUNPOD_JOB_BASE} must be a JSON object, got "
+            f"{type(submitted).__name__} — {SUBMISSION_UNKNOWN}"
+        )
     job_id = submitted.get("id")
     if not job_id:
-        raise OneshotError(f"no job id in submission response: {submitted}")
+        raise OneshotError(
+            f"no job id in submission response: {submitted} — {SUBMISSION_UNKNOWN}"
+        )
+    print(SUBMISSION_ACCEPTED.format(job_id=job_id), file=sys.stderr)
 
     if not args.wait and not args.sync:
         print(job_id)
@@ -294,6 +415,11 @@ def main(argv=None):
             time.sleep(POLL_SECONDS)
             status = http_json("GET", f"{RUNPOD_JOB_BASE}/{endpoint_id}/status/{job_id}",
                               key=api_key)
+            if not isinstance(status, dict):
+                raise OneshotError(
+                    f"status response for job {job_id} must be a JSON object, got "
+                    f"{type(status).__name__}"
+                )
             if status.get("status") in TERMINAL_STATES:
                 remote = status
                 break
@@ -304,17 +430,29 @@ def main(argv=None):
 
     state = remote.get("status")
     if state != "COMPLETED":
-        print(f"[FAIL] job {job_id} ended {state}: "
-              f"{json.dumps(remote.get('error') or remote.get('output') or remote)}",
-              file=sys.stderr)
+        detail = json.dumps(remote.get("error") or remote.get("output") or remote)
+        if state == "FAILED":
+            message = f"job {job_id} failed: {detail}"
+        elif state == "CANCELLED":
+            message = f"job {job_id} was cancelled before it finished: {detail}"
+        elif state == "TIMED_OUT":
+            message = f"job {job_id} timed out on the worker: {detail}"
+        else:
+            message = f"job {job_id} ended in unexpected state {state!r}: {detail}"
+        print(f"[FAIL] {message}", file=sys.stderr)
         return 1
 
     destination = output_dir(args.output, args.project, job_id)
     destination.mkdir(parents=True, exist_ok=True)
     (destination / "response.json").write_text(json.dumps(remote, indent=2), encoding="utf-8")
+    items = collect_outputs(remote.get("output"))
+    if not items:
+        print(f"[FAIL] job {job_id} completed but the response carried no outputs; "
+              f"see {destination / 'response.json'}", file=sys.stderr)
+        return 1
     saved = 0
-    unrecognized = 0
-    for item in collect_outputs(remote.get("output")):
+    failures = []
+    for item in items:
         key = item.get("key", "output")
         index = item.get("index", 0)
         filename = Path(item.get("filename")
@@ -322,26 +460,36 @@ def main(argv=None):
         target = destination / filename
         try:
             if item.get("url"):
-                with urllib.request.urlopen(item["url"], timeout=300) as response:
-                    target.write_bytes(response.read())
+                with _http_open(item["url"], timeout=300) as response:
+                    payload = response.read()
             elif item.get("data"):
                 data = item["data"]
                 if data.startswith("data:") and "," in data:
                     data = data.split(",", 1)[1]
-                target.write_bytes(base64.b64decode(data))
+                # Workers may wrap base64; whitespace is not payload, other junk is.
+                payload = base64.b64decode("".join(data.split()), validate=True)
             else:
-                unrecognized += 1
+                failures.append(f"{filename}: unrecognized item; see response.json")
                 continue
         except (ValueError, OSError, urllib.error.URLError) as exc:
-            print(f"[warn] could not write {target.name}: {exc}", file=sys.stderr)
+            failures.append(f"{filename}: {exc}")
+            continue
+        if not payload:
+            failures.append(f"{filename}: empty payload")
+            continue
+        try:
+            target.write_bytes(payload)
+        except OSError as exc:
+            failures.append(f"{filename}: could not write {target}: {exc}")
             continue
         print(f"saved {target}")
         saved += 1
-    if unrecognized:
-        print(f"[warn] {unrecognized} output item(s) not recognized; see response.json",
-              file=sys.stderr)
+    if failures:
+        print(f"[FAIL] saved {saved} of {len(items)} output(s); failed: "
+              + "; ".join(failures), file=sys.stderr)
+        return 1
     print(destination.resolve())
-    return 0 if saved else 1
+    return 0
 
 
 if __name__ == "__main__":

@@ -1,15 +1,15 @@
 {
   "version": 1,
-  "built_at": "2026-10-16T04:21:57.511945+00:00",
+  "built_at": "2026-10-22T01:13:03.599982+00:00",
   "templates": {
     "unholy-sdxl": {
       "schema": 1,
       "model_family": "sdxl",
       "model_info": {
-        "checkpoint": "unholyDesireMixSinister_v80.safetensors",
+        "checkpoint": "unholyDesireMixSinister_v90.safetensors",
         "trigger_word": "",
-        "lora": "cinematic photography detailed illu xl v5.safetensors",
-        "lora_strength": "0.8",
+        "lora": "rimixxO2.safetensors",
+        "lora_strength": "1.0",
         "base_prompt": ""
       },
       "positive": {

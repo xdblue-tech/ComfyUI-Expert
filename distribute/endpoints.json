@@ -1,10 +1,10 @@
 {
   "unholy-sdxl": {
     "endpoint_id": "qh4pzo1c96gnxw",
-    "image_tag": "xdblue/unholy-sdxl:v1.0.0",
+    "image_tag": "xdblue/unholy-sdxl:v1.1.0",
     "gpu_types": [
       "NVIDIA GeForce RTX 4090"
     ],
-    "generated_at": "2026-10-16T04:21:57.511933+00:00"
+    "generated_at": "2026-10-22T01:13:03.599960+00:00"
   }
 }
