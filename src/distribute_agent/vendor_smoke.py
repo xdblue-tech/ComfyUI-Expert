@@ -1,6 +1,6 @@
 """Opt-in real vendor smoke test: one job, one artifact, no secrets recorded.
 
-This is the only place the prototype touches the vendor. It is disabled unless
+This is the only place the package touches the vendor. It is disabled unless
 the caller passes ``--enable-live-vendor`` and supplies ``RUNPOD_API_KEY`` in the
 environment. The key never enters the report and the artifact is decoded locally
 with Pillow under byte, dimension and pixel caps: a complete image stream that
@@ -8,14 +8,20 @@ produces real pixels, never a header or a chunk list that only looks complete. T
 decoded image is not displayed, saved elsewhere or sent to a model.
 """
 
-import io
 import json
 import os
 import time
 from pathlib import Path
 
-from PIL import Image
-
+from .artifacts import (
+    IMAGE_FORMATS as IMAGE_FORMATS,
+    IMAGE_SUFFIXES as IMAGE_SUFFIXES,
+    MAX_ARTIFACT_BYTES as MAX_ARTIFACT_BYTES,
+    MAX_ARTIFACT_DIMENSION as MAX_ARTIFACT_DIMENSION,
+    MAX_ARTIFACT_PIXELS as MAX_ARTIFACT_PIXELS,
+    ArtifactError,
+    sniff_image as _sniff_image,
+)
 from .bridge import submit_plan
 
 DEFAULT_KEY_ENV = "RUNPOD_API_KEY"
@@ -29,14 +35,9 @@ DEFAULT_PLAN = {
     "width": 832,
     "height": 1216,
 }
-IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg"}
-IMAGE_FORMATS = {"PNG", "JPEG"}
-MAX_ARTIFACT_BYTES = 64 * 1024 * 1024
-MAX_ARTIFACT_PIXELS = 16 * 1024 * 1024
-MAX_ARTIFACT_DIMENSION = 8192
 
 
-class VendorSmokeError(RuntimeError):
+class VendorSmokeError(ArtifactError):
     """The smoke test could not run or the vendor result was not usable."""
 
 
@@ -142,51 +143,16 @@ def _describe_image(path: Path, failures: list):
 
 
 def sniff_image(data: bytes):
-    """Return (format, width, height) after verifying and decoding the image.
+    """Shared decoder, re-raised as this module's error type.
 
-    A header alone is not evidence of a usable image: a truncated download has
-    one, a structurally valid PNG can carry an empty IDAT, and a JPEG can stop
-    after its frame header. ``verify()`` walks the container (chunk structure,
-    CRCs, terminator) and a second open inflates every pixel with ``load()``, so a
-    broken or truncated stream raises instead of passing. The canvas is bounded
-    before that allocation, which also refuses a decompression bomb. Nothing is
-    displayed and nothing leaves this process.
+    The implementation moved to :mod:`distribute_agent.artifacts` so the service
+    can validate the same way. Callers that import ``VendorSmokeError`` or
+    ``sniff_image`` from here keep the previous type and messages.
     """
-    if len(data) > MAX_ARTIFACT_BYTES:
-        raise VendorSmokeError(
-            f"artifact is {len(data)} bytes; the cap is {MAX_ARTIFACT_BYTES}"
-        )
     try:
-        with Image.open(io.BytesIO(data)) as image:
-            image_format = image.format
-            width, height = image.size
-            if image_format not in IMAGE_FORMATS:
-                raise VendorSmokeError(
-                    f"artifact format {image_format!r} is not PNG or JPEG"
-                )
-            if width <= 0 or height <= 0:
-                raise VendorSmokeError(f"artifact has non-positive dimensions {width}x{height}")
-            if width > MAX_ARTIFACT_DIMENSION or height > MAX_ARTIFACT_DIMENSION:
-                raise VendorSmokeError(
-                    f"artifact is {width}x{height}; each side is capped at "
-                    f"{MAX_ARTIFACT_DIMENSION}"
-                )
-            if width * height > MAX_ARTIFACT_PIXELS:
-                raise VendorSmokeError(
-                    f"artifact is {width * height} pixels; the cap is "
-                    f"{MAX_ARTIFACT_PIXELS} pixels"
-                )
-            image.verify()
-        # verify() leaves the image unusable, so pixels need a fresh open.
-        with Image.open(io.BytesIO(data)) as image:
-            image.load()
-    except VendorSmokeError:
-        raise
-    except (OSError, ValueError, SyntaxError, Image.DecompressionBombError) as exc:
-        raise VendorSmokeError(
-            f"artifact does not decode to pixels ({exc}); it is truncated or corrupt"
-        ) from exc
-    return image_format.lower(), width, height
+        return _sniff_image(data)
+    except ArtifactError as exc:
+        raise VendorSmokeError(str(exc)) from exc
 
 
 def write_smoke_report(report: dict, output_dir) -> Path:

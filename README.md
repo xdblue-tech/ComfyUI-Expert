@@ -78,6 +78,7 @@ ComfyUI-Expert/
 |-- CLAUDE.md                    Pointer to AGENTS.md
 |-- LICENSE                      Repository license (MIT)
 |-- README.md
+|-- pyproject.toml               Python package for the distributed agent (src layout)
 |-- docs/
 |   |-- architecture.md
 |   |-- compatibility.md
@@ -90,11 +91,37 @@ ComfyUI-Expert/
 |   |-- scan_inventory.py
 |   +-- session.py
 |-- skills/                      15 AgentSkills
+|-- src/distribute_agent/        SmolAgents agent that plans and submits RunPod jobs
+|   +-- service/                Private FastMCP endpoint (auth, runtime, artifacts)
 |-- state/                       Runtime state; contents are gitignored
 +-- tests/
+    |-- agent/                   Agent suite (Python 3.12, installed package)
+    |-- service/                 Endpoint runtime and transport suite
     |-- test_scan_inventory.py
     +-- test_session.py
 ```
+
+The `distribute_agent` package installs from `pyproject.toml`. Install, venv,
+CLI and test commands are in `src/distribute_agent/README.md`.
+
+## Private media endpoint
+
+The package also ships an optional loopback MCP endpoint that plans an image,
+submits one paid RunPod generation, and serves the validated artifact. It is
+disabled for billing until the operator passes `--enable-generation` and exports
+`RUNPOD_API_KEY`, and every MCP request needs an HS256 bearer token minted from
+`MEDIAGEN_JWT_SECRET`:
+
+```bash
+uv pip install --python .venv/bin/python -e '.[server]'
+export MEDIAGEN_JWT_SECRET="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+.venv/bin/python -m distribute_agent token
+.venv/bin/python -m distribute_agent serve --package distribute
+```
+
+See [docs/endpoint.md](docs/endpoint.md) for authentication, token rotation,
+client setup, artifact caps, error codes, host/origin protection, durability
+limits and the offline verification tracer.
 
 ## Compatibility
 

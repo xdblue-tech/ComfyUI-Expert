@@ -50,7 +50,7 @@ def code_agent_prompt_templates() -> dict:
     if PERSISTENT_STATE_CLAIM not in system_prompt:
         raise RuntimeError(
             "smolagents' CodeAgent system prompt no longer contains the persistent "
-            "state claim this prototype replaces; review "
+            "state claim this package replaces; review "
             "agent.STATELESS_STATE_RULE against the installed prompt"
         )
     templates = dict(templates)

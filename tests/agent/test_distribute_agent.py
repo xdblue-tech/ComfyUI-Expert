@@ -1,11 +1,11 @@
-"""Tests for the experiments/distribute_agent prototype.
+"""Tests for the src/distribute_agent package.
 
-This suite lives with the prototype because it needs smolagents and a Python 3.12
-interpreter, which the repository itself does not: run it from this directory
-(``python -m unittest discover -s tests``) with the prototype's environment, not
-through the repository's default ``tests/`` discovery. Missing dependencies fail
-this module loudly instead of skipping, so a security test can never pass by
-silently not running.
+This suite needs the installed package (smolagents and Python 3.12), which the
+repository's stdlib suite does not: run it from the repository root with the
+package's environment, ``python -m unittest discover -s tests/agent``. It has no
+``__init__.py``, so the default ``tests/`` discovery does not descend into it.
+Missing dependencies fail this module loudly instead of skipping, so a security
+test can never pass by silently not running.
 
 Coverage tags map to the approved integration test plan: S1-S4 skill/package/
 isolation, P1-P4 prompt and request preservation, E1-E4 end-to-end dry run,
@@ -29,11 +29,8 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest import mock
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-PROTOTYPE_DIR = PROJECT_ROOT / "experiments" / "distribute_agent"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PACKAGE_SOURCE = PROJECT_ROOT / "distribute"
-
-sys.path.insert(0, str(PROTOTYPE_DIR))
 
 try:
     from distribute_agent import agent as agent_module
@@ -74,9 +71,9 @@ try:
     from PIL import Image
 except ModuleNotFoundError as exc:  # pragma: no cover - environment guard
     raise RuntimeError(
-        "the distribute_agent prototype needs its pinned environment: "
-        "python3.12 -m venv /tmp/da-venv && "
-        "/tmp/da-venv/bin/python -m pip install 'smolagents==1.26.0' "
+        "the distribute_agent suite needs the installed package and its pinned "
+        "environment: from the repository root, "
+        "'uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -e .' "
         f"(missing: {exc})"
     ) from exc
 
@@ -769,9 +766,11 @@ except OSError as exc:
             "    print('read without rejection')\n"
             "    raise SystemExit(3)\n"
         )
+        # cwd is a temp directory, not the repository: the import below must come
+        # from the installed package, so a stale checkout path cannot mask it.
         completed = subprocess.run(
             [sys.executable, "-c", script, str(fifo)],
-            cwd=str(PROTOTYPE_DIR),
+            cwd=str(self.root),
             capture_output=True,
             text=True,
             timeout=20,
@@ -1716,10 +1715,12 @@ class VendorSmokeTests(unittest.TestCase):
 class OptInCliTests(unittest.TestCase):
     """The enable flags are CLI-level too, not just Python arguments."""
 
-    def run_cli(self, *arguments):
+    def run_cli(self, *arguments, cwd):
+        # cwd is a temp directory so `-m distribute_agent` must resolve through the
+        # installed package rather than the repository layout.
         return subprocess.run(
             [sys.executable, "-m", "distribute_agent", *arguments],
-            cwd=PROTOTYPE_DIR,
+            cwd=cwd,
             capture_output=True,
             text=True,
             timeout=120,
@@ -1731,6 +1732,7 @@ class OptInCliTests(unittest.TestCase):
                 "live-eval",
                 "--package", str(PROJECT_ROOT / "distribute"),
                 "--workspace", str(Path(tmp) / "workspace"),
+                cwd=tmp,
             )
         self.assertEqual(completed.returncode, 2, completed.stderr)
         self.assertIn("not-run", completed.stdout)
@@ -1742,6 +1744,7 @@ class OptInCliTests(unittest.TestCase):
                 "vendor-smoke",
                 "--package", str(PROJECT_ROOT / "distribute"),
                 "--output", str(Path(tmp) / "output"),
+                cwd=tmp,
             )
         self.assertEqual(completed.returncode, 2, completed.stderr)
         self.assertIn("not-run", completed.stdout)
@@ -1834,6 +1837,59 @@ class BridgeTests(unittest.TestCase):
             self.assertTrue(caught.exception.may_have_submitted)
             self.assertEqual(caught.exception.job_id, "job-77")
             self.assertIn("job-77", str(caught.exception))
+
+    def test_a_timeout_retains_an_accepted_job_id_from_bytes_or_text_stderr(self):
+        payloads = {
+            "bytes": b"[info] job vendor-77 accepted\n",
+            "text": "[info] job vendor-77 accepted\n",
+        }
+        for label, payload in payloads.items():
+            with self.subTest(stderr=label), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                package = Package.load(copy_package(root / "package"))
+                expired = subprocess.TimeoutExpired(
+                    cmd="runner", timeout=30, stderr=payload
+                )
+                with mock.patch(
+                    "distribute_agent.bridge.subprocess.run", side_effect=expired
+                ) as run:
+                    with self.assertRaises(BridgeError) as caught:
+                        submit_plan(
+                            package,
+                            {"template": "unholy-sdxl", "prompt": "bridge"},
+                            output_dir=root / "out",
+                            env={"RUNPOD_API_KEY": "rpa_bridge_secret"},
+                            runner_prefix=[sys.executable, "stub_runner.py"],
+                            timeout=30,
+                        )
+                self.assertEqual(run.call_count, 1)
+                self.assertTrue(caught.exception.may_have_submitted)
+                self.assertEqual(caught.exception.job_id, "vendor-77")
+                self.assertIn("do not resubmit", str(caught.exception))
+
+    def test_a_timeout_without_a_marker_stays_uncertain_and_does_not_retry(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            package = Package.load(copy_package(root / "package"))
+            expired = subprocess.TimeoutExpired(
+                cmd="runner", timeout=30, stderr=b"[FAIL] network error on POST\n"
+            )
+            with mock.patch(
+                "distribute_agent.bridge.subprocess.run", side_effect=expired
+            ) as run:
+                with self.assertRaises(BridgeError) as caught:
+                    submit_plan(
+                        package,
+                        {"template": "unholy-sdxl", "prompt": "bridge"},
+                        output_dir=root / "out",
+                        env={"RUNPOD_API_KEY": "rpa_bridge_secret"},
+                        runner_prefix=[sys.executable, "stub_runner.py"],
+                        timeout=30,
+                    )
+            self.assertEqual(run.call_count, 1)
+            self.assertTrue(caught.exception.may_have_submitted)
+            self.assertIsNone(caught.exception.job_id)
+            self.assertNotIn("network error", str(caught.exception))
 
     def test_an_unusable_post_response_is_reported_as_uncertain(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -2,7 +2,7 @@
 
 Two different questions exist here and this module keeps them apart:
 
-* the tests in ``tests/test_distribute_agent.py`` use a scripted model to prove the
+* the tests in ``tests/agent/test_distribute_agent.py`` use a scripted model to prove the
   skill, package metadata, sandbox and runner are wired together;
 * this harness asks a *real* model to follow the skill. It costs money and
   needs a provider, so it only runs when the caller passes ``--enable-live-model``

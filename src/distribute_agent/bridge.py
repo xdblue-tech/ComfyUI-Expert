@@ -98,11 +98,23 @@ def submit_plan(
             cwd=str(output),
         )
     except subprocess.TimeoutExpired as exc:
+        # A timeout can follow a POST that was already accepted. ``stderr`` may
+        # be bytes or text depending on where the timeout hit; normalize it and
+        # reuse the accepted-marker parser so the known vendor id is retained.
+        stderr = _scrub(_as_text(exc.stderr), api_key)
+        accepted = SUBMISSION_ACCEPTED_PATTERN.search(stderr)
+        job_id = accepted.group(1) if accepted else None
+        consequence = (
+            f" — job {job_id} was submitted; do not resubmit it. Read the existing "
+            "job on the endpoint before running anything else"
+            if job_id is not None
+            else " — the job may have been accepted and may still complete on "
+            "RunPod; check the endpoint's jobs before resubmitting"
+        )
         raise BridgeError(
-            f"runner did not finish within {timeout:.0f}s — the job may have been "
-            "accepted and may still complete on RunPod; check the endpoint's jobs "
-            "before resubmitting",
+            f"runner did not finish within {timeout:.0f}s" + consequence,
             may_have_submitted=True,
+            job_id=job_id,
         ) from exc
     except OSError as exc:
         raise BridgeError(f"could not start the packaged runner: {exc}") from exc
@@ -139,6 +151,14 @@ def submit_plan(
         stdout=stdout,
         stderr=stderr,
     )
+
+
+def _as_text(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return str(value)
 
 
 def _scrub(text: str, secret: str) -> str:

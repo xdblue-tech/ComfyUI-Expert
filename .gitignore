@@ -1,3 +1,8 @@
+# Local credentials (keep the template versioned)
+.env
+.env.*
+!.env.example
+
 # Runtime state (machine-specific)
 state/*
 !state/.gitkeep
@@ -24,10 +29,17 @@ Desktop.ini
 # pi personal project config (machine-specific)
 .pi/settings.json
 
-# Python caches
+# Python caches and packaging
 __pycache__/
 .pytest_cache/
 .ruff_cache/
+*.egg-info/
+build/
+.venv/
+
+# Private MCP endpoint runtime state (already under state/* and output/)
+state/mediagen/
+output/mediagen/
 
 
 # In-repo smoke-test outputs of the distribute package

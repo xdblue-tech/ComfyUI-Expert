@@ -1,0 +1,231 @@
+{
+  "fixture_version": 1,
+  "kind": "historical-offline-replay",
+  "disclaimer": "These are three real model answers captured on 2026-10-22 by the opt-in glm-5.3-flash live-eval run and accepted by the corrected offline checker. They are replayed offline against the current checker: this fixture proves the checker's verdict on saved text only. It is not a fresh preview, plan or model test, and it claims no image was generated.",
+  "provenance": {
+    "source_report_path": "output/distribute-agent/glm-5.3-flash-settings-recheck-mon8lc_2/live-eval.json",
+    "source_report_sha256": "d29b2c09ab435f8f10fb595be6825542c99fa509b039f1d3c69c88125abdd5f3",
+    "rescored_report_path": "output/distribute-agent/glm-5.3-flash-settings-recheck-mon8lc_2/settings-rescored.json",
+    "rescored_report_sha256": "7c69563f7fc82d1f27917657093b0dbbc06c61098044b2ef46309f9f25a09f99",
+    "rescored_created_at": "2026-10-22T06:16:08.502630+00:00",
+    "original_status": "failed",
+    "evaluation_mode": "offline-rescore",
+    "additional_model_requests": 0,
+    "additional_vendor_jobs": 0,
+    "preview_evidence": "Copied unchanged from the original successful matching-preview checks; previews were not rerun.",
+    "checker_sha256": "c6ccc71edf1fa9e7f07f5596d3242d1e54ea0e3c1595d4f0b60077b7ef1eae81",
+    "checker_module": "src/distribute_agent/live_eval.py",
+    "checker_sha256_note": "Hash of live_eval.py as it stood for the offline rescore. The promotion edit changed one docstring test path, so the current file hash differs; _check_answer itself is unchanged, and the replay executes it.",
+    "model": {
+      "backend": "InferenceClientModel with OpenAI-compatible client",
+      "model_id": "glm-5.3-flash",
+      "base_url_kind": "OpenAI-compatible local proxy (host omitted when sanitized)",
+      "max_tokens": 4096,
+      "temperature": 0.2,
+      "client_timeout_seconds": 60,
+      "automatic_model_retries": false
+    },
+    "bounds": {
+      "repetitions": 3,
+      "max_steps": 6,
+      "deadline_seconds": 180,
+      "max_requests": 21
+    },
+    "requests_used": 7,
+    "environment": {
+      "smolagents": "1.26.0",
+      "executor": "SandboxedPythonExecutor (bubblewrap)",
+      "skill_name": "runpod-oneshot",
+      "skill_sha256": "4d25f41dddb2d188559d09ec62da5fb922748bf3d611741f819abe550566e7c4"
+    },
+    "implementation_sha256": {
+      "agent.py": "77af9e859e70dd36464e78c5809298a3d6c36f1c9d80266b13678d2ca510a0b1",
+      "plan.py": "e286c74db41ee3ab37aac0fd9ccd2eabf45ce86716531cc1275fb4edc7602e77",
+      "live_eval.py": "5f1c49aa4f7f1375c487111ccb892358f21d5e1c55614c7980f690a65a1cbced"
+    }
+  },
+  "brief": {
+    "id": "explicit-settings",
+    "task": "Plan one image with seed 42 at 832x1216: a rain-soaked cyberpunk alley at night, neon reflections, no text. Keep seed and size exactly as given; verify with run_oneshot_preview and return the plan as JSON.",
+    "expected_settings": {
+      "seed": 42,
+      "width": 832,
+      "height": 1216
+    },
+    "expect_rejection": false,
+    "required_prompt_terms": [
+      "cyberpunk",
+      "alley"
+    ],
+    "required_exclusion_terms": [
+      "text",
+      "lettering",
+      "writing",
+      "letters",
+      "words"
+    ]
+  },
+  "runs": [
+    {
+      "repetition": 1,
+      "original_status": "fail",
+      "rescored_status": "pass",
+      "model_requests": 3,
+      "answer": {
+        "template": "unholy-sdxl",
+        "prompt": "masterpiece, best quality, photorealistic cyberpunk alley at night, rain-soaked wet pavement with mirror-like neon reflections, glowing magenta and cyan light tubes, holographic billboards without lettering, steam drifting from street vents, puddles reflecting towering megastructures, tangled cables and dripping pipes, atmospheric fog, cinematic rim lighting, high contrast chiaroscuro, ultra detailed textures, shallow depth of field, RAW photo quality, 8k uhd, film grain",
+        "seed": 42,
+        "width": 832,
+        "height": 1216
+      },
+      "rescored_checks": [
+        {
+          "name": "plan valid",
+          "ok": true
+        },
+        {
+          "name": "seed preserved",
+          "ok": true,
+          "detail": "expected 42, got 42"
+        },
+        {
+          "name": "width preserved",
+          "ok": true,
+          "detail": "expected 832, got 832"
+        },
+        {
+          "name": "height preserved",
+          "ok": true,
+          "detail": "expected 1216, got 1216"
+        },
+        {
+          "name": "prompt non-empty",
+          "ok": true
+        },
+        {
+          "name": "prompt keeps the brief",
+          "ok": true,
+          "detail": "heuristic term check, not semantic verification; missing [] from 'masterpiece, best quality, photorealistic cyberpunk alley at night, rain-soaked wet pavement with mirror-like neon reflections, glowing magenta and cyan light tubes, holographic billboards without let'"
+        },
+        {
+          "name": "prompt keeps exclusions",
+          "ok": true,
+          "detail": "heuristic keyword check, not full semantic verification; positive exclusion=True, negative exclusion=False; expected any of ['text', 'lettering', 'writing', 'letters', 'words']"
+        },
+        {
+          "name": "preview executed and matched",
+          "ok": true,
+          "detail": "2 of 2 validated preview(s) match the returned plan for unholy-sdxl; the record is sandbox-authored evidence, not a tamperproof attestation"
+        }
+      ]
+    },
+    {
+      "repetition": 2,
+      "original_status": "fail",
+      "rescored_status": "pass",
+      "model_requests": 2,
+      "answer": {
+        "template": "unholy-sdxl",
+        "prompt": "masterpiece, best quality, photorealistic rain-soaked cyberpunk alley at night, wet asphalt with mirror-like puddles, vivid neon reflections in pink cyan and purple, glowing neon tubes on dark walls, steam rising from street vents, towering dark skyscrapers, moody cinematic lighting, atmospheric fog, ultra detailed, sharp focus, 8k uhd, film grain",
+        "negative": "text, watermark, signature, letters, words, captions, logo, username",
+        "seed": 42,
+        "width": 832,
+        "height": 1216
+      },
+      "rescored_checks": [
+        {
+          "name": "plan valid",
+          "ok": true
+        },
+        {
+          "name": "seed preserved",
+          "ok": true,
+          "detail": "expected 42, got 42"
+        },
+        {
+          "name": "width preserved",
+          "ok": true,
+          "detail": "expected 832, got 832"
+        },
+        {
+          "name": "height preserved",
+          "ok": true,
+          "detail": "expected 1216, got 1216"
+        },
+        {
+          "name": "prompt non-empty",
+          "ok": true
+        },
+        {
+          "name": "prompt keeps the brief",
+          "ok": true,
+          "detail": "heuristic term check, not semantic verification; missing [] from 'masterpiece, best quality, photorealistic rain-soaked cyberpunk alley at night, wet asphalt with mirror-like puddles, vivid neon reflections in pink cyan and purple, glowing neon tubes on dark walls, '"
+        },
+        {
+          "name": "prompt keeps exclusions",
+          "ok": true,
+          "detail": "heuristic keyword check, not full semantic verification; positive exclusion=False, negative exclusion=True; expected any of ['text', 'lettering', 'writing', 'letters', 'words']"
+        },
+        {
+          "name": "preview executed and matched",
+          "ok": true,
+          "detail": "1 of 1 validated preview(s) match the returned plan for unholy-sdxl; the record is sandbox-authored evidence, not a tamperproof attestation"
+        }
+      ]
+    },
+    {
+      "repetition": 3,
+      "original_status": "fail",
+      "rescored_status": "pass",
+      "model_requests": 2,
+      "answer": {
+        "template": "unholy-sdxl",
+        "prompt": "masterpiece, best quality, photorealistic rain-soaked cyberpunk alley at night, glossy wet asphalt with vivid neon reflections, magenta and cyan neon tubes glowing, puddles mirroring colorful lights, steam rising from street vents, towering dark buildings, moody atmospheric fog, cinematic lighting, ultra detailed, depth of field, 8k uhd, film grain",
+        "negative": "text, letters, words, watermark, signature, logo, username, writing",
+        "seed": 42,
+        "width": 832,
+        "height": 1216
+      },
+      "rescored_checks": [
+        {
+          "name": "plan valid",
+          "ok": true
+        },
+        {
+          "name": "seed preserved",
+          "ok": true,
+          "detail": "expected 42, got 42"
+        },
+        {
+          "name": "width preserved",
+          "ok": true,
+          "detail": "expected 832, got 832"
+        },
+        {
+          "name": "height preserved",
+          "ok": true,
+          "detail": "expected 1216, got 1216"
+        },
+        {
+          "name": "prompt non-empty",
+          "ok": true
+        },
+        {
+          "name": "prompt keeps the brief",
+          "ok": true,
+          "detail": "heuristic term check, not semantic verification; missing [] from 'masterpiece, best quality, photorealistic rain-soaked cyberpunk alley at night, glossy wet asphalt with vivid neon reflections, magenta and cyan neon tubes glowing, puddles mirroring colorful lights, '"
+        },
+        {
+          "name": "prompt keeps exclusions",
+          "ok": true,
+          "detail": "heuristic keyword check, not full semantic verification; positive exclusion=False, negative exclusion=True; expected any of ['text', 'lettering', 'writing', 'letters', 'words']"
+        },
+        {
+          "name": "preview executed and matched",
+          "ok": true,
+          "detail": "1 of 1 validated preview(s) match the returned plan for unholy-sdxl; the record is sandbox-authored evidence, not a tamperproof attestation"
+        }
+      ]
+    }
+  ]
+}

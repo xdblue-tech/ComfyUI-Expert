@@ -1,0 +1,34 @@
+[project]
+name = "distribute-agent"
+version = "0.1.0"
+description = "SmolAgents CodeAgent driving the standalone RunPod oneshot package"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "smolagents==1.26.0",
+    "Pillow>=10.0",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+# The live-eval CLI defaults to litellm; base smolagents does not install it.
+litellm = ["smolagents[litellm]==1.26.0"]
+# The private MCP endpoint. The agent package itself never imports these.
+server = [
+    "fastmcp==4.1.3",
+    "pydantic>=2.12",
+    "starlette>=1.0.1",
+    "uvicorn>=0.35",
+    "joserfc>=1.5",
+    "huggingface-hub>=0.31.2",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["distribute_agent*"]
