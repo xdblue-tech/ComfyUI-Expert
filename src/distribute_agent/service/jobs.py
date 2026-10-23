@@ -1,12 +1,15 @@
 """Transactional SQLite job store with durable idempotency.
 
-One database per runtime, schema ``user_version`` 1. Every mutation opens an
+One database per runtime, schema ``user_version`` 2. Every mutation opens an
 immediate transaction, so enqueue, claim and finish are serialised by SQLite
 itself; the in-process lock only keeps one connection from interleaving
-statements. ``request_id`` is unique: the same validated plan and package digest
-returns the existing job, changed content is a conflict, and no caller can
-create a second submission for one request id. The database is the queue, so a
-restart recovers persisted jobs without any in-memory state.
+statements. ``request_id`` is unique: the same request text, specs, plan and
+package digest returns the existing job, changed content is a conflict, and no
+caller can create a second submission for one request id. The database is the
+queue, so a restart recovers persisted jobs without any in-memory state.
+
+A version 1 database is migrated in place on open by adding the v2 columns; its
+rows read back with no request text, no specs and no diagnostics.
 """
 
 import json
@@ -29,7 +32,8 @@ from .types import (
     error_record,
 )
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+V1_SCHEMA_VERSION = 1
 
 _SCHEMA = """
 CREATE TABLE jobs (
@@ -45,7 +49,10 @@ CREATE TABLE jobs (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     started_at TEXT,
-    finished_at TEXT
+    finished_at TEXT,
+    request_text TEXT,
+    specs_json TEXT,
+    diagnostics_json TEXT
 );
 CREATE INDEX jobs_status_created ON jobs(status, created_at);
 CREATE TABLE artifacts (
@@ -62,6 +69,14 @@ CREATE TABLE artifacts (
 );
 CREATE INDEX artifacts_job ON artifacts(job_id);
 """
+
+# Additive only: ALTER TABLE ... ADD COLUMN cannot rewrite existing rows, so a
+# version 1 database keeps its jobs and they read back with NULL v2 values.
+_V1_TO_V2 = (
+    "ALTER TABLE jobs ADD COLUMN request_text TEXT",
+    "ALTER TABLE jobs ADD COLUMN specs_json TEXT",
+    "ALTER TABLE jobs ADD COLUMN diagnostics_json TEXT",
+)
 
 
 @dataclass(frozen=True)
@@ -121,28 +136,51 @@ class JobStore:
         self._connection.execute("PRAGMA foreign_keys=ON")
         self._connection.execute("PRAGMA busy_timeout=30000")
         version = self._connection.execute("PRAGMA user_version").fetchone()[0]
-        if version == 0:
-            self._connection.executescript(_SCHEMA)
-            self._connection.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
-        elif version != SCHEMA_VERSION:
+        if version not in (0, V1_SCHEMA_VERSION, SCHEMA_VERSION):
             raise ServiceError(
                 STORAGE_ERROR,
                 f"job database schema version {version} is incompatible; this "
                 f"runtime expects {SCHEMA_VERSION}",
             )
-        tables = {
-            row[0]
-            for row in self._connection.execute(
-                "SELECT name FROM sqlite_master WHERE type = 'table'"
-            ).fetchall()
-        }
-        missing = {"jobs", "artifacts"} - tables
-        if missing:
-            raise ServiceError(
-                STORAGE_ERROR,
-                "the job database schema is incompatible; missing table(s): "
-                + ", ".join(sorted(missing)),
-            )
+        if version != 0:
+            # Checked before migrating so a corrupt v1 file reports the real
+            # problem instead of an ALTER TABLE error.
+            tables = {
+                row[0]
+                for row in self._connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                ).fetchall()
+            }
+            missing = {"jobs", "artifacts"} - tables
+            if missing:
+                raise ServiceError(
+                    STORAGE_ERROR,
+                    "the job database schema is incompatible; missing table(s): "
+                    + ", ".join(sorted(missing)),
+                )
+        if version == 0:
+            self._connection.executescript(_SCHEMA)
+            self._connection.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
+        elif version == V1_SCHEMA_VERSION:
+            self._migrate_v1_to_v2()
+
+    def _migrate_v1_to_v2(self) -> None:
+        """Add the v2 columns in one transaction, then stamp the new version."""
+        with self._lock:
+            self._begin()
+            try:
+                for statement in _V1_TO_V2:
+                    self._connection.execute(statement)
+                self._connection.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
+                self._connection.commit()
+            except sqlite3.Error as exc:
+                self._rollback()
+                raise ServiceError(
+                    STORAGE_ERROR,
+                    "the job database could not be migrated to schema "
+                    f"{SCHEMA_VERSION}; save the state directory aside and start "
+                    "with a fresh one",
+                ) from exc
 
     # -- reads ---------------------------------------------------------
 
@@ -193,13 +231,23 @@ class JobStore:
         plan: dict,
         package_digest: str,
         max_waiting_jobs: int,
+        request_text=None,
+        specs=None,
+        diagnostics=None,
     ):
         """Insert one queued job, or return the identical existing one.
 
         Returns ``(view, created)``. Capacity is counted inside the same
         transaction, so concurrent admissions cannot exceed the waiting bound.
+        Identity is the request text and canonical specs; the plan and digest are
+        outputs, not identity, so two concurrent admissions of one request that
+        planned separately still resolve to the first job. A row admitted by an
+        older schema has no request text or specs, so it only matches another row
+        that also has none.
         """
         plan_json = _dump(plan, "plan")
+        specs_json = _dump(specs or {}, "specs")
+        diagnostics_json = _dump(diagnostics or {}, "diagnostics")
         with self._lock:
             self._begin()
             try:
@@ -208,12 +256,18 @@ class JobStore:
                 ).fetchone()
                 if row is not None:
                     self._connection.rollback()
-                    if row["plan_json"] == plan_json and row["package_digest"] == package_digest:
+                    identical = (
+                        row["request_text"] == request_text
+                        and (row["specs_json"] or "{}") == specs_json
+                    )
+                    if identical:
                         return self.get_job(row["job_id"]), False
+                    # Never echo the caller's id: it is caller-chosen text, so it
+                    # does not belong in a bounded message.
                     raise ServiceError(
                         REQUEST_CONFLICT,
-                        f"request id {request_id!r} already names a different plan or "
-                        "package digest; use a new request id for a new job",
+                        "the supplied request id already names a different prompt or "
+                        "specs; use a new request id for a new job",
                     )
                 waiting = self._connection.execute(
                     "SELECT COUNT(*) FROM jobs WHERE status = 'queued'"
@@ -230,9 +284,20 @@ class JobStore:
                 now = _now()
                 self._connection.execute(
                     "INSERT INTO jobs (job_id, request_id, status, plan_json, "
-                    "package_digest, created_at, updated_at) "
-                    "VALUES (?, ?, 'queued', ?, ?, ?, ?)",
-                    (job_id, request_id, plan_json, package_digest, now, now),
+                    "package_digest, request_text, specs_json, diagnostics_json, "
+                    "created_at, updated_at) "
+                    "VALUES (?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        job_id,
+                        request_id,
+                        plan_json,
+                        package_digest,
+                        request_text,
+                        specs_json,
+                        diagnostics_json,
+                        now,
+                        now,
+                    ),
                 )
                 self._connection.commit()
             except ServiceError:
@@ -447,6 +512,10 @@ class JobStore:
         try:
             plan = json.loads(row["plan_json"])
             error = json.loads(row["error_json"]) if row["error_json"] else None
+            specs = json.loads(row["specs_json"]) if row["specs_json"] else None
+            diagnostics = (
+                json.loads(row["diagnostics_json"]) if row["diagnostics_json"] else {}
+            )
         except ValueError as exc:
             raise ServiceError(
                 STORAGE_ERROR, "the job database contains an unreadable record"
@@ -469,6 +538,9 @@ class JobStore:
             updated_at=row["updated_at"],
             started_at=row["started_at"],
             finished_at=row["finished_at"],
+            diagnostics=diagnostics,
+            request_text=row["request_text"],
+            specs=specs,
         )
 
 

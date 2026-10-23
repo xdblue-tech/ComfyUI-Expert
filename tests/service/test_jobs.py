@@ -1,5 +1,6 @@
 """Transactional store behaviour: schema, idempotency, capacity and recovery."""
 
+import json
 import sqlite3
 import tempfile
 import threading
@@ -26,8 +27,64 @@ PLAN = {
 }
 
 
+V1_SCHEMA = """
+CREATE TABLE jobs (
+    job_id TEXT PRIMARY KEY,
+    request_id TEXT NOT NULL UNIQUE,
+    status TEXT NOT NULL CHECK (
+        status IN ('queued', 'running', 'succeeded', 'failed', 'needs_attention')
+    ),
+    plan_json TEXT NOT NULL,
+    package_digest TEXT NOT NULL,
+    vendor_job_id TEXT,
+    error_json TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    started_at TEXT,
+    finished_at TEXT
+);
+CREATE INDEX jobs_status_created ON jobs(status, created_at);
+CREATE TABLE artifacts (
+    artifact_id TEXT PRIMARY KEY,
+    job_id TEXT NOT NULL REFERENCES jobs(job_id) ON DELETE CASCADE,
+    relative_path TEXT NOT NULL,
+    mime_type TEXT NOT NULL,
+    width INTEGER NOT NULL CHECK (width > 0),
+    height INTEGER NOT NULL CHECK (height > 0),
+    size_bytes INTEGER NOT NULL CHECK (size_bytes > 0),
+    sha256 TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(job_id, relative_path)
+);
+CREATE INDEX artifacts_job ON artifacts(job_id);
+"""
+
+
+def write_v1_database(path, request_id="old-request", plan=None):
+    """A schema-version-1 database with one queued job and no v2 columns."""
+    connection = sqlite3.connect(path)
+    try:
+        connection.executescript(V1_SCHEMA)
+        connection.execute(
+            "INSERT INTO jobs (job_id, request_id, status, plan_json, package_digest, "
+            "created_at, updated_at) VALUES (?, ?, 'queued', ?, ?, ?, ?)",
+            (
+                "old-job",
+                request_id,
+                json.dumps(plan or PLAN, sort_keys=True),
+                DIGEST,
+                "2026-01-01T00:00:00+00:00",
+                "2026-01-01T00:00:00+00:00",
+            ),
+        )
+        connection.execute("PRAGMA user_version=1")
+        connection.commit()
+    finally:
+        connection.close()
+
+
 class SchemaTests(unittest.TestCase):
-    def test_new_database_is_version_one_with_jobs_and_artifacts(self):
+    def test_new_database_is_version_two_with_jobs_and_artifacts(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "jobs.sqlite3"
             store = JobStore(path)
@@ -41,14 +98,60 @@ class SchemaTests(unittest.TestCase):
                 }
             finally:
                 store.close()
-            self.assertEqual(version, 1)
+            self.assertEqual(version, 2)
             self.assertLessEqual({"jobs", "artifacts"}, tables)
+
+    def test_version_one_database_migrates_in_place_on_reopen(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "jobs.sqlite3"
+            write_v1_database(path)
+            store = JobStore(path)
+            try:
+                self.assertEqual(
+                    store._connection.execute("PRAGMA user_version").fetchone()[0], 2
+                )
+                columns = {
+                    row[1]
+                    for row in store._connection.execute("PRAGMA table_info(jobs)")
+                }
+                self.assertLessEqual(
+                    {"request_text", "specs_json", "diagnostics_json"}, columns
+                )
+                old = store.get_job("old-job")
+            finally:
+                store.close()
+            # The row the migration kept reads back with empty v2 values.
+            self.assertEqual(old.status, "queued")
+            self.assertEqual(old.plan, PLAN)
+            self.assertIsNone(old.request_text)
+            self.assertIsNone(old.specs)
+            self.assertEqual(old.diagnostics, {})
+            # A migrated database accepts the new columns on a fresh admission.
+            reopened = JobStore(path)
+            try:
+                view, created = reopened.enqueue(
+                    request_id="new-request",
+                    plan=PLAN,
+                    package_digest=DIGEST,
+                    max_waiting_jobs=20,
+                    request_text="a lighthouse in fog",
+                    specs={"id": "new-request", "category": "sd-semireal"},
+                    diagnostics={"model_requests": 1},
+                )
+            finally:
+                reopened.close()
+            self.assertTrue(created)
+            self.assertEqual(view.request_text, "a lighthouse in fog")
+            self.assertEqual(
+                view.specs, {"id": "new-request", "category": "sd-semireal"}
+            )
+            self.assertEqual(view.diagnostics, {"model_requests": 1})
 
     def test_incompatible_schema_version_fails(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "jobs.sqlite3"
             connection = sqlite3.connect(path)
-            connection.execute("PRAGMA user_version=2")
+            connection.execute("PRAGMA user_version=3")
             connection.commit()
             connection.close()
             with self.assertRaises(ServiceError) as caught:
@@ -77,7 +180,7 @@ class EnqueueTests(unittest.TestCase):
         self.store = JobStore(Path(self.temporary.name) / "jobs.sqlite3")
         self.addCleanup(self.store.close)
 
-    def test_same_request_and_plan_returns_the_existing_job(self):
+    def test_same_request_and_specs_returns_the_existing_job(self):
         first, created = self.store.enqueue(
             request_id="req-1",
             plan=PLAN,
@@ -96,26 +199,61 @@ class EnqueueTests(unittest.TestCase):
         self.assertEqual(first.job_id, second.job_id)
         self.assertEqual(self.store.count_queued(), 1)
 
-    def test_changed_plan_or_digest_conflicts(self):
+    def test_same_request_and_specs_replays_a_differently_planned_job(self):
+        # Two admissions of one request can plan separately between the replay
+        # lookup and the insert, so the plan is an output, not identity.
+        first, created = self.store.enqueue(
+            request_id="req-1",
+            plan=PLAN,
+            package_digest=DIGEST,
+            max_waiting_jobs=20,
+            request_text="a lighthouse in fog",
+            specs={"id": "req-1", "category": "sd-semireal"},
+        )
+        second, created_again = self.store.enqueue(
+            request_id="req-1",
+            plan={**PLAN, "prompt": "a second stochastic plan", "seed": 7},
+            package_digest="b" * 64,
+            max_waiting_jobs=20,
+            request_text="a lighthouse in fog",
+            specs={"id": "req-1", "category": "sd-semireal"},
+        )
+        self.assertTrue(created)
+        self.assertFalse(created_again)
+        self.assertEqual(first.job_id, second.job_id)
+        self.assertEqual(self.store.count_queued(), 1)
+        self.assertEqual(second.plan, PLAN)
+        self.assertEqual(second.package_digest, DIGEST)
+
+    def test_changed_request_text_or_specs_conflicts(self):
         self.store.enqueue(
             request_id="req-1",
             plan=PLAN,
             package_digest=DIGEST,
             max_waiting_jobs=20,
+            request_text="a lighthouse in fog",
+            specs={"id": "req-1", "category": "sd-semireal"},
         )
-        for label, plan, digest in (
-            ("prompt", {**PLAN, "prompt": "different"}, DIGEST),
-            ("digest", PLAN, "b" * 64),
+        for label, text, value in (
+            ("request", "a different brief", {"id": "req-1", "category": "sd-semireal"}),
+            (
+                "specs",
+                "a lighthouse in fog",
+                {"id": "req-1", "category": "sd-semireal", "width": 1024},
+            ),
         ):
             with self.subTest(case=label):
                 with self.assertRaises(ServiceError) as caught:
                     self.store.enqueue(
                         request_id="req-1",
-                        plan=plan,
-                        package_digest=digest,
+                        plan=PLAN,
+                        package_digest=DIGEST,
                         max_waiting_jobs=20,
+                        request_text=text,
+                        specs=value,
                     )
                 self.assertEqual(caught.exception.code, REQUEST_CONFLICT)
+                self.assertNotIn("req-1", caught.exception.message)
 
     def test_concurrent_duplicates_create_exactly_one_job(self):
         barrier = threading.Barrier(8)
@@ -147,6 +285,8 @@ class EnqueueTests(unittest.TestCase):
                     plan={**PLAN, "prompt": prompt},
                     package_digest=DIGEST,
                     max_waiting_jobs=20,
+                    request_text=prompt,
+                    specs={"id": "req-conflict", "category": "sd-semireal"},
                 )
                 return ("ok", view.job_id, created)
             except ServiceError as exc:

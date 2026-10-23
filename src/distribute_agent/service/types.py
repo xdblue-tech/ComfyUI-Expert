@@ -119,7 +119,12 @@ class ArtifactContent:
 
 @dataclass(frozen=True)
 class JobView:
-    """The persisted view returned by ``start_generation`` / ``get_generation``."""
+    """The persisted view returned by ``start_generation`` / ``get_generation``.
+
+    ``request_text`` and ``specs`` are the idempotency identity the row was
+    admitted with; they are kept for replay matching and are not published.
+    ``diagnostics`` is the bounded planning summary and is published.
+    """
 
     job_id: str
     request_id: str
@@ -133,6 +138,9 @@ class JobView:
     updated_at: str
     started_at: Optional[str]
     finished_at: Optional[str]
+    diagnostics: dict = field(default_factory=dict)
+    request_text: Optional[str] = None
+    specs: Optional[dict] = None
 
     @property
     def is_terminal(self) -> bool:
@@ -152,6 +160,7 @@ class JobView:
             "vendor_job_id": self.vendor_job_id,
             "artifacts": [artifact.as_dict() for artifact in self.artifacts],
             "error": dict(self.error) if self.error else None,
+            "diagnostics": dict(self.diagnostics),
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "started_at": self.started_at,

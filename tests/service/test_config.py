@@ -25,18 +25,30 @@ class ServiceConfigTests(unittest.TestCase):
             **overrides,
         )
 
-    def test_only_loopback_hosts_are_accepted(self):
+    def test_bind_addresses_are_validated(self):
         with tempfile.TemporaryDirectory() as tmp:
-            for host in ("127.0.0.1", "::1", "localhost"):
+            for host in (
+                "127.0.0.1",
+                "::1",
+                "localhost",
+                "0.0.0.0",
+                "::",
+                "192.168.1.10",
+            ):
                 with self.subTest(host=host):
                     self.assertEqual(self.config(tmp, host=host).host, host)
-            for host in ("0.0.0.0", "192.168.1.10", "media.internal"):
+            for host in ("media.internal", "8000", "127.0.0.1:8000", "127.0.0.1/8"):
                 with self.subTest(host=host):
                     with self.assertRaises(ConfigError) as caught:
                         self.config(tmp, host=host)
-                    self.assertIn("loopback", str(caught.exception))
+                    self.assertIn("bind address", str(caught.exception))
             with self.assertRaises(ConfigError):
                 self.config(tmp, host="")
+
+    def test_bind_defaults_are_loopback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = self.config(tmp)
+        self.assertEqual((config.host, config.port), ("127.0.0.1", 8000))
 
     def test_host_and_origin_allowlists_are_normalized(self):
         with tempfile.TemporaryDirectory() as tmp:

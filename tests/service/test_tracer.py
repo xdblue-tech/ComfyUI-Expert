@@ -193,17 +193,12 @@ class CompleteTracerTests(unittest.IsolatedAsyncioTestCase):
             server = make_server(runtime)
             async with asgi_server(server) as running:
                 async with running.client(headers=auth_headers()) as client:
-                    plan = await client.call_tool("plan_media", {"request": PROMPT})
-                    self.assertEqual(plan.structured_content["diagnostics"]["validated_previews"], 1)
-                    body = {
-                        "plan": plan.structured_content["plan"],
-                        "package_digest": plan.structured_content["package_digest"],
-                        "request_id": "tracer-request-1",
-                    }
-                    first, second = await asyncio.gather(
-                        client.call_tool("start_generation", body),
-                        client.call_tool("start_generation", body),
+                    body = {"prompt": PROMPT, "specs": {"id": "tracer-request-1"}}
+                    first = await client.call_tool("start_generation", body)
+                    self.assertEqual(
+                        first.structured_content["diagnostics"]["validated_previews"], 1
                     )
+                    second = await client.call_tool("start_generation", body)
                     self.assertEqual(
                         first.structured_content["job_id"],
                         second.structured_content["job_id"],

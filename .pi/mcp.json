@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "mediagen": {
+      "url": "http://127.0.0.1:7123/mcp",
+      "headers": {
+        "Authorization": "Bearer ${MEDIAGEN_TOKEN}"
+      }
+    }
+  }
+}

@@ -87,17 +87,23 @@ def parse_plan(manifest: dict, data) -> OneshotPlan:
     )
 
 
-def plan_schema(manifest: dict) -> dict:
+def plan_schema(manifest: dict, template: str = None) -> dict:
     """JSON Schema for the flat object :func:`parse_plan` accepts.
 
     The field names, ranges and step come from the same constants ``parse_plan``
     enforces, and the template enum comes from the active manifest. Constraints
     JSON Schema cannot express (NUL bytes in text, booleans and numeric strings
     are not integers) are stated in :func:`plan_output_instructions`.
+
+    ``template`` narrows the enum to one declared name: a caller that already
+    chose the template from a stable category must not let the agent pick
+    another.
     """
     templates = (manifest or {}).get("templates")
     if not isinstance(templates, dict) or not templates:
         raise PlanError("manifest has no templates; the package is incomplete")
+    if template is not None and template not in templates:
+        raise PlanError(f"pinned template {template!r} is not declared by the manifest")
     return {
         "type": "object",
         "additionalProperties": False,
@@ -105,7 +111,7 @@ def plan_schema(manifest: dict) -> dict:
         "properties": {
             "template": {
                 "type": "string",
-                "enum": sorted(templates),
+                "enum": [template] if template is not None else sorted(templates),
                 "description": "Template name declared by the active manifest.",
             },
             "prompt": {
@@ -134,9 +140,22 @@ def plan_schema(manifest: dict) -> dict:
     }
 
 
-def plan_output_instructions(manifest: dict) -> str:
-    """Agent instructions pairing the flat-plan schema with its prose rules."""
-    schema = json.dumps(plan_schema(manifest), indent=2)
+def plan_output_instructions(manifest: dict, template: str = None) -> str:
+    """Agent instructions pairing the flat-plan schema with its prose rules.
+
+    A pinned ``template`` replaces the enum and states the choice, so the agent
+    spends no step weighing templates the caller has already decided.
+    """
+    schema = json.dumps(plan_schema(manifest, template), indent=2)
+    if template is None:
+        template_rule = (
+            "- `template` is required and must be one of the manifest's templates.\n"
+        )
+    else:
+        template_rule = (
+            f"- `template` is required and must be `{template}`: the request's "
+            "category already chose it, so do not evaluate other templates.\n"
+        )
     return (
         "\n# Final answer: one flat plan\n\n"
         "This run produces one plan. End it by calling `final_answer(plan)` with the "
@@ -144,7 +163,7 @@ def plan_output_instructions(manifest: dict) -> str:
         "JSON-encoded string, and no fields beyond these:\n\n"
         f"{schema}\n\n"
         "Field rules:\n"
-        "- `template` is required and must be one of the manifest's templates.\n"
+        f"{template_rule}"
         "- `prompt` and `negative` are strings with no NUL byte; omit them or pass "
         "null to keep the template's value.\n"
         "- `seed`, `width` and `height` are JSON integers: booleans, numeric strings "

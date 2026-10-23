@@ -7,17 +7,47 @@ import os
 import sys
 from pathlib import Path
 
-from .live_eval import DEFAULT_DEADLINE_SECONDS, DEFAULT_MAX_STEPS, DEFAULT_REPETITIONS
-from .live_eval import run_live_eval
 from .service.config import (
+    ConfigError,
     DEFAULT_AUTH_AUDIENCE,
     DEFAULT_AUTH_ISSUER,
     DEFAULT_AUTH_SCOPE,
     DEFAULT_AUTH_SECRET_ENV,
     DEFAULT_AUTH_TOKEN_TTL_SECONDS,
     DEFAULT_HOST,
+    DEFAULT_MODEL_API_KEY_ENV,
+    DEFAULT_MODEL_BASE_URL,
+    DEFAULT_MODEL_ID,
     DEFAULT_PORT,
 )
+
+BIND_HOST_ENV = "MEDIAGEN_HOST"
+BIND_PORT_ENV = "MEDIAGEN_PORT"
+MODEL_ID_ENV = "MEDIAGEN_MODEL_ID"
+MODEL_BASE_URL_ENV = "MEDIAGEN_MODEL_BASE_URL"
+MODEL_API_KEY_ENV_ENV = "MEDIAGEN_MODEL_API_KEY_ENV"
+ENABLE_GENERATION_ENV = "MEDIAGEN_ENABLE_GENERATION"
+
+# Snapshot before the harness imports below: importing the agent stack runs
+# smolagents' load_dotenv(), which copies a nearby .env into os.environ. Reading
+# the environment later would treat unexported serve settings as exported ones
+# and silently move the listen address, swap the planning model or enable paid
+# generation. Only these six values are captured.
+_CONFIG_ENVIRONMENT = {
+    name: os.environ[name]
+    for name in (
+        BIND_HOST_ENV,
+        BIND_PORT_ENV,
+        MODEL_ID_ENV,
+        MODEL_BASE_URL_ENV,
+        MODEL_API_KEY_ENV_ENV,
+        ENABLE_GENERATION_ENV,
+    )
+    if name in os.environ
+}
+
+from .live_eval import DEFAULT_DEADLINE_SECONDS, DEFAULT_MAX_STEPS, DEFAULT_REPETITIONS
+from .live_eval import run_live_eval
 from .vendor_smoke import DEFAULT_PLAN, run_vendor_smoke, write_smoke_report
 
 
@@ -60,7 +90,7 @@ def build_parser() -> argparse.ArgumentParser:
     vendor.add_argument("--height", type=int, default=DEFAULT_PLAN["height"])
 
     serve = subparsers.add_parser(
-        "serve", help="run the private authenticated MCP endpoint on loopback"
+        "serve", help="run the private authenticated MCP endpoint"
     )
     serve.add_argument("--package", required=True, help="path to the shipped package")
     serve.add_argument("--state-dir", default="state/mediagen",
@@ -69,12 +99,30 @@ def build_parser() -> argparse.ArgumentParser:
                        help="validated job artifacts")
     serve.add_argument(
         "--host",
-        default=DEFAULT_HOST,
-        help="loopback bind address; remote access goes through an SSH tunnel",
+        default=None,
+        help=f"bind address; defaults to {BIND_HOST_ENV} or {DEFAULT_HOST}",
     )
-    serve.add_argument("--port", type=int, default=DEFAULT_PORT)
-    serve.add_argument("--enable-generation", action="store_true",
-                       help="allow paid jobs; also requires RUNPOD_API_KEY")
+    serve.add_argument(
+        "--port",
+        type=int,
+        default=None,
+        help=f"TCP port; defaults to {BIND_PORT_ENV} or {DEFAULT_PORT}",
+    )
+    generation = serve.add_mutually_exclusive_group()
+    generation.add_argument(
+        "--enable-generation",
+        action="store_true",
+        dest="enable_generation",
+        default=None,
+        help=f"allow paid jobs; overrides {ENABLE_GENERATION_ENV}; "
+             "also requires RUNPOD_API_KEY",
+    )
+    generation.add_argument(
+        "--disable-generation",
+        action="store_false",
+        dest="enable_generation",
+        help=f"force generation off, even when {ENABLE_GENERATION_ENV} is true",
+    )
     serve.add_argument("--model-id", default=None, help="planning model id")
     serve.add_argument("--model-base-url", default=None,
                        help="OpenAI-compatible planning proxy")
@@ -153,11 +201,80 @@ def main(argv=None) -> int:
     return 0 if report["status"] == "passed" else 1
 
 
+def _bind_address(cli_host, cli_port, environment):
+    """Resolve the listen address: flags, then exported settings, then defaults.
+
+    The caller passes the environment snapshot taken at the CLI boundary before
+    the harness imports; those pull in smolagents, whose module-level
+    load_dotenv() copies a nearby .env into os.environ. Reading later would treat
+    unexported bind settings as exported ones and silently move the listen
+    address.
+    """
+    host = cli_host
+    if host is None:
+        host = environment.get(BIND_HOST_ENV, "").strip() or DEFAULT_HOST
+    port = cli_port
+    if port is None:
+        exported = environment.get(BIND_PORT_ENV, "").strip()
+        if exported:
+            try:
+                port = int(exported)
+            except ValueError as exc:
+                raise ConfigError(
+                    f"{BIND_PORT_ENV}={exported!r} is not an integer port"
+                ) from exc
+        else:
+            port = DEFAULT_PORT
+    return host, port
+
+
+def _model_settings(arguments, environment):
+    """Resolve the planning model: flags, then exported settings, then defaults."""
+    settings = {}
+    for flag, variable, fallback in (
+        ("model_id", MODEL_ID_ENV, DEFAULT_MODEL_ID),
+        ("model_base_url", MODEL_BASE_URL_ENV, DEFAULT_MODEL_BASE_URL),
+        ("model_api_key_env", MODEL_API_KEY_ENV_ENV, DEFAULT_MODEL_API_KEY_ENV),
+    ):
+        value = getattr(arguments, flag) or environment.get(variable, "").strip()
+        settings[flag] = value or fallback
+    return settings
+
+
+def _generation_enabled(cli_value, environment):
+    """Resolve paid generation: an explicit CLI choice, then a strict export."""
+    if cli_value is not None:
+        return cli_value
+    exported = environment.get(ENABLE_GENERATION_ENV, "")
+    normalized = exported.strip().lower()
+    if not normalized:
+        return False
+    if normalized in ("true", "1", "yes", "on"):
+        return True
+    if normalized in ("false", "0", "no", "off"):
+        return False
+    raise ConfigError(
+        f"{ENABLE_GENERATION_ENV}={exported!r} is not a boolean; use "
+        "true/false, 1/0, yes/no or on/off"
+    )
+
+
 def _serve(arguments) -> int:
+    # Resolve from the boundary snapshot, before the service stack imports the
+    # agent and smolagents' load_dotenv() can inject a nearby .env.
+    try:
+        host, port = _bind_address(arguments.host, arguments.port, _CONFIG_ENVIRONMENT)
+        model_settings = _model_settings(arguments, _CONFIG_ENVIRONMENT)
+        generation_enabled = _generation_enabled(
+            arguments.enable_generation, _CONFIG_ENVIRONMENT
+        )
+    except ConfigError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     try:
         from .service.auth import AuthConfigError, build_verifier, load_secret
         from .service.app import build_server, run_server
-        from .service.config import ConfigError, ServiceConfig
+        from .service.config import ServiceConfig
         from .service.runtime import MediaRuntime
     except ModuleNotFoundError as exc:
         print(
@@ -167,30 +284,21 @@ def _serve(arguments) -> int:
         )
         return 2
 
-    model_overrides = {}
-    for flag, field in (
-        ("model_id", "model_id"),
-        ("model_base_url", "model_base_url"),
-        ("model_api_key_env", "model_api_key_env"),
-    ):
-        value = getattr(arguments, flag)
-        if value:
-            model_overrides[field] = value
     try:
         config = ServiceConfig(
             package_root=Path(arguments.package),
             state_dir=Path(arguments.state_dir),
             output_dir=Path(arguments.output_dir),
-            host=arguments.host,
-            port=arguments.port,
-            generation_enabled=arguments.enable_generation,
+            host=host,
+            port=port,
+            generation_enabled=generation_enabled,
             auth_secret_env=arguments.auth_secret_env,
             auth_issuer=arguments.issuer,
             auth_audience=arguments.audience,
             auth_scope=arguments.scope,
             allowed_hosts=tuple(arguments.allow_host),
             allowed_origins=tuple(arguments.allow_origin),
-            **model_overrides,
+            **model_settings,
         )
         secret = load_secret(secret_env=config.auth_secret_env)
         verifier = build_verifier(
@@ -204,7 +312,7 @@ def _serve(arguments) -> int:
         return 2
     if config.generation_enabled and not os.environ.get(config.api_key_env):
         print(
-            f"warning: --enable-generation is set but {config.api_key_env} is absent; "
+            f"warning: generation is enabled but {config.api_key_env} is absent; "
             "generation stays disabled",
             file=sys.stderr,
         )

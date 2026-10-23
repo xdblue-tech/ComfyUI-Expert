@@ -1,6 +1,6 @@
 # Private media endpoint
 
-A loopback-only FastMCP server that turns a natural-language brief into a
+A FastMCP server (loopback by default) that turns a natural-language brief into a
 validated image plan, submits the plan to the RunPod endpoint through the
 existing packaged runner, and serves the validated artifact back over MCP or
 HTTP. One process owns one state directory and one generation worker.
@@ -26,6 +26,12 @@ generated Python and the runner dry-run inside the existing sandbox.
 
 | Variable | Required | Purpose |
 |---|---|---|
+| `MEDIAGEN_HOST` | no | Bind address for `serve`; default `127.0.0.1`. |
+| `MEDIAGEN_PORT` | no | TCP port for `serve`; default `8000`. |
+| `MEDIAGEN_MODEL_ID` | no | Planning model id; default `glm-5.3-flash`. |
+| `MEDIAGEN_MODEL_BASE_URL` | no | OpenAI-compatible planning proxy; default `http://hades.home:8317/v1`. |
+| `MEDIAGEN_MODEL_API_KEY_ENV` | no | Name of the variable holding the proxy key; default `MEDIAGEN_PROXY_API_KEY`. |
+| `MEDIAGEN_ENABLE_GENERATION` | no | Strict boolean for paid generation; default `false`. |
 | `MEDIAGEN_JWT_SECRET` | yes | Shared HS256 signing secret, at least 32 bytes. Generate it once per deployment. |
 | `RUNPOD_API_KEY` | for generation | Vendor key read by the bridge. Never written to artifacts or logs. |
 | `MEDIAGEN_PROXY_API_KEY` | for planning | Key for the OpenAI-compatible planning proxy. |
@@ -39,6 +45,18 @@ export MEDIAGEN_JWT_SECRET="$(python3 -c 'import secrets; print(secrets.token_ur
 Generate a stable secret once and store it in the operator's secret manager;
 restarting the service with a different secret invalidates every issued token.
 
+The CLI does not load `.env` itself; source it first (`set -a; source .env;
+set +a`) or export the values. Exported serve settings are read only when the
+matching flag is absent, so `--host`, `--port`, `--model-id`,
+`--model-base-url`, `--model-api-key-env`,
+`--enable-generation`/`--disable-generation` always win. That holds even over
+an unparsable exported port or boolean; `--disable-generation` explicitly turns
+off an exported true, and `--enable-generation` turns it on when the export is
+absent or false. Empty or unset values fall back to the pinned defaults.
+`MEDIAGEN_ENABLE_GENERATION` accepts `true`/`1`/`yes`/`on` or
+`false`/`0`/`no`/`off`, case-insensitive after trimming whitespace; empty means
+false, and any other non-empty value stops startup with exit 2.
+
 ## Serve
 
 ```bash
@@ -50,21 +68,32 @@ restarting the service with a different secret invalidates every issued token.
 ```
 
 Defaults: host `127.0.0.1`, port `8000`, MCP path `/mcp`, stateless Streamable
-HTTP, generation **disabled**. `--enable-generation` is required, and generation
-still stays disabled unless `RUNPOD_API_KEY` is present in the environment.
+HTTP, planning model `glm-5.3-flash` through `http://hades.home:8317/v1`, and
+generation **disabled**. `--host`, `--port`, `--model-id`, `--model-base-url`,
+`--model-api-key-env` and the generation flags override their exports; empty or
+unset exports fall back to the defaults. The host must be an IP literal
+(`127.0.0.1`, `::1`, a LAN address, or the wildcard `0.0.0.0` or `::`) or
+`localhost`; startup refuses anything else, including a non-numeric exported
+port or a malformed generation boolean.
 
-`--model-id`, `--model-base-url` and `--model-api-key-env` override the pinned
-planning model (`glm-5.3-flash` through `http://hades.home:8317/v1`). The
-`--auth-secret-env`, `--issuer`, `--audience` and `--scope` flags must match the
-values used when minting tokens.
+The `--auth-secret-env`, `--issuer`, `--audience` and `--scope` flags must match
+the values used when minting tokens. Paid work needs generation enabled by
+`--enable-generation` or `MEDIAGEN_ENABLE_GENERATION` (`--disable-generation`
+forces it off) **and** `RUNPOD_API_KEY` in the environment; without the key
+generation stays disabled.
 
-The host must resolve to a loopback address (`127.0.0.1`, `::1` or
-`localhost`); startup refuses anything else. Reach a remote host through an SSH
-tunnel; the service does not terminate TLS:
+Reach a remote host through an SSH tunnel when the service stays on loopback;
+it does not terminate TLS:
 
 ```bash
 ssh -N -L 8000:127.0.0.1:8000 operator@media-host
 ```
+
+A LAN bind (`MEDIAGEN_HOST=0.0.0.0` or a LAN address) exposes the endpoint
+directly and therefore needs a TLS-terminating proxy in front of it. The
+Host/Origin guard described below only covers a wildcard bind when the client's
+host is listed explicitly; JWT auth applies to every MCP request and the
+artifact route on any bind.
 
 ## Issue, renew and rotate tokens
 
@@ -110,23 +139,40 @@ returns `{"status": "ok"}` for process supervision.
 
 | Tool | Input | Result |
 |---|---|---|
-| `plan_media` | `request` (1–8192 characters) | `plan`, `package_digest`, `model_id`, bounded `diagnostics` |
-| `start_generation` | raw `plan` object, `package_digest`, `request_id` | persisted job: id, status, plan, digest, timestamps |
-| `get_generation` | `job_id` | status, timestamps, plan, optional vendor id, artifact metadata, optional error |
+| `start_generation` | `prompt` (1–8192 characters), `specs` | persisted job: id, status, plan, digest, diagnostics, timestamps |
+| `get_generation` | `job_id` | status, timestamps, plan, diagnostics, optional vendor id, artifact metadata, optional error |
 
-`request_id` must match `[A-Za-z0-9._-]{1,128}`. It is the idempotency key: an
-exact retry is checked against the request's own immutable snapshot and returns
-the existing job even after a live package edit; a changed body under the same
-id fails with `request_conflict`. Concurrent duplicates still produce exactly
-one submission attempt.
+`start_generation` is the only mutating call: it plans the brief, applies the
+specs overrides and enqueues the job in one round trip. `specs` is a strict JSON
+object:
 
-`plan` is passed to the strict parser as raw JSON. Numeric strings (`"seed":
-"42"`), booleans, unknown fields and aliases are rejected, not coerced.
+| Field | Rule |
+|---|---|
+| `id` | Required, `[A-Za-z0-9._-]{1,128}`. The idempotency key. |
+| `category` | Optional, one of `sd-semireal` (the default). |
+| `width`, `height` | Optional integers, a multiple of 8. The effective output must stay within the decoder limits: 8192 pixels per side and 16 Mi pixels. |
+| `seed` | Optional integer, 0 to 2^64-1. Omit for the template's random-seed policy. |
 
-`start_generation` revalidates the plan, runs the real packaged runner with
-`--dry-run` and no credential, checks the effective output size (template
-defaults included) against the decoder limits (8192 pixels per side, 16 Mi
-pixels), then persists the job before acknowledging it.
+The category picks the plan's template, so the client-facing name keeps meaning
+the same thing when the package changes. Unknown keys, an unknown category, a
+non-integer number and an out-of-range value are rejected with `invalid_input`
+before any model call.
+
+`id` is the idempotency key: a repeat is answered from the store, without
+planning again, and returns the existing job even after a live package edit. A
+changed prompt or specs under the same id fails with `request_conflict`. One
+planner runs at a time, so a concurrent duplicate either replays the job or is
+told `busy`; it never creates a second job or a second submission.
+
+`start_generation` plans against the package snapshot this process pinned, then
+revalidates the merged plan, runs the real packaged runner with `--dry-run` and
+no credential, and checks the effective output size (template defaults included)
+against the decoder limits (8192 pixels per side, 16 Mi pixels), before
+persisting the job. A planning or preflight failure leaves no job row and costs
+nothing at the vendor.
+
+`diagnostics` on the job is the bounded planning summary: duration, model
+requests, agent steps, validated previews and the agent's final state.
 
 Statuses are `queued`, `running`, `succeeded`, `failed`, `needs_attention`. An
 empty, missing, partial or corrupt published image cannot succeed.
@@ -162,7 +208,6 @@ Failures use stable, redacted code prefixes in their message or response body:
 | `generation_disabled` | Flag off or `RUNPOD_API_KEY` absent |
 | `busy` | A planner is already running |
 | `capacity` | 20 jobs are already waiting |
-| `stale_digest` | Digest is not the package this process serves |
 | `request_conflict` | Request id already names a different body |
 | `unknown_job`, `unknown_artifact` | No such persisted id |
 | `artifact_too_large`, `artifact_corrupt` | Read cap or bytes changed/missing |
@@ -180,8 +225,11 @@ submission.
 ## Host and origin protection
 
 FastMCP's guard is enabled in `auto` mode: on a loopback bind it validates every
-request. A foreign `Host` gets `421`; a foreign browser `Origin` gets `403`.
-Additional trusted values are explicit:
+request. On a wildcard or LAN bind it validates only when a host is listed
+explicitly, so pass the name or address clients use (for example
+`--allow-host 192.168.1.10`) to keep DNS-rebinding protection. A foreign `Host`
+gets `421`; a foreign browser `Origin` gets `403`. Additional trusted values are
+explicit:
 
 ```bash
 --allow-host media.internal --allow-origin http://media.internal:8000
@@ -193,13 +241,14 @@ Do not use `*` unless the port is already behind a trusted proxy.
 
 - Startup takes an exclusive lock on `<state-dir>/runtime.lock`, pins a
   content-addressed copy of only `manifest.json`, `endpoints.json`, `bin/`,
-  `workflows/` and `skills/`, opens SQLite schema version 1, and marks any job
-  left `running` as `needs_attention`.
+  `workflows/` and `skills/`, opens SQLite schema version 2 (migrating a
+  version 1 database in place by adding the request, specs and diagnostics
+  columns), and marks any job left `running` as `needs_attention`.
 - The live package is read only at startup. Restart the service to serve edited
   package files. Queued jobs load the snapshot named by their stored digest, so a
   later package edit cannot change a submission already accepted. An exact retry
-  of an existing `request_id` is validated against that same stored snapshot
-  before the current package is consulted.
+  of an existing `request_id` is answered from the stored request text and specs
+  without planning again or consulting the live manifest.
 - One planner runs at a time; `busy` is returned instead of queueing planners.
   One worker processes jobs. Twenty queued jobs is the admission bound.
 - A client disconnect does not cancel a paid generation; the worker is
@@ -227,7 +276,7 @@ job were made for this endpoint.
 ```bash
 python3 -m unittest discover -s tests                     # 151 stdlib tests
 .venv/bin/python -m unittest discover -s tests/agent      # 72 agent tests
-.venv/bin/python -m unittest discover -s tests/service    # 126 service tests
+.venv/bin/python -m unittest discover -s tests/service    # 147 service tests
 uv pip check --python .venv/bin/python                    # dependency closure
 ```
 
@@ -248,7 +297,6 @@ base; the production URL is untouched.
 | `error: MEDIAGEN_JWT_SECRET is not set` | Export a secret of at least 32 bytes before `serve` or `token`. |
 | Every MCP call returns 401 | Token expired, wrong issuer/audience/scope, or signed with a different secret. |
 | `generation_disabled` | Add `--enable-generation` **and** export `RUNPOD_API_KEY`, then restart. |
-| `stale_digest` | Call `plan_media` again; the process is serving a different package snapshot. |
 | `busy` | Wait for the running planner; the endpoint does not queue planners. |
 | Artifact read returns 413 | Use `GET /artifacts/...`; the MCP resource is capped at 8 MiB. |
 | `needs_attention` with a vendor id | Inspect that RunPod job before running anything else; do not resubmit blindly. |

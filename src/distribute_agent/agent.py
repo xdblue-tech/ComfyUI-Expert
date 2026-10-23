@@ -126,6 +126,7 @@ def build_agent(
     max_model_requests: int = None,
     model_budget: ModelBudget = None,
     plan_manifest: dict = None,
+    plan_template: str = None,
 ) -> CodeAgent:
     """Build the agent; ``plan_manifest`` opts into the strict flat-plan contract.
 
@@ -134,6 +135,8 @@ def build_agent(
     for any run whose answer will be submitted: the agent gets the flat-plan
     schema and the real :func:`~distribute_agent.plan.parse_plan` runs as a native
     final-answer check and again at the host boundary in :func:`run_agent`.
+    ``plan_template`` pins the schema's template enum and the instructions to one
+    declared template, for a caller that already chose it from a category.
     """
     workspace_dir = Path(workspace_dir)
     sandbox_workspace = workspace_dir / "workspace"
@@ -162,7 +165,7 @@ def build_agent(
     budget = model_budget or ModelBudget(max_model_requests)
     plan_checks = []
     if plan_manifest is not None:
-        instructions += plan_output_instructions(plan_manifest)
+        instructions += plan_output_instructions(plan_manifest, plan_template)
         plan_checks.append(_plan_final_answer_check(plan_manifest))
     agent = CodeAgent(
         tools=[PreviewOneshotTool()],

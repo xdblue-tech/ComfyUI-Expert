@@ -1,15 +1,19 @@
 """Durable media runtime: planning, admission, one worker, opaque artifacts.
 
-The transport is intentionally absent. :class:`MediaRuntime` exposes five
+The transport is intentionally absent. :class:`MediaRuntime` exposes four
 blocking calls that a server wraps in threads:
 
-* ``plan(request)`` — one fresh model/agent/sandbox workspace, strict plan.
-* ``start_generation(plan, package_digest, request_id)`` — validate, dry-run the
-  real runner without credentials, then enqueue and return.
+* ``start_generation(prompt, specs)`` — validate the specs, plan the brief
+  against the serving snapshot, apply the pixel and seed overrides, dry-run the
+  real runner without credentials, then enqueue and return. This is the only
+  mutating call.
 * ``get_generation(job_id)`` — persisted status, plan and artifact metadata.
 * ``read_artifact(job_id, artifact_id, max_bytes=...)`` — a bounded, no-follow
   read of one validated image.
 * ``start()`` / ``stop()`` — state lock, snapshot, recovery, one worker.
+
+``plan(request, template=None)`` is the planner step on its own, used by
+``start_generation`` and by tests; no transport exposes it.
 
 Model construction and submission are plain callables injected at construction
 (``model_factory`` and ``submission``), so tests can drive the runtime offline.
@@ -39,6 +43,7 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from typing import Optional
 
 from ..agent import AgentRunError, build_agent, redact, run_agent
 from ..artifacts import (
@@ -67,7 +72,6 @@ from .types import (
     RUNTIME_ERROR,
     SHUTTING_DOWN,
     SNAPSHOT_UNAVAILABLE,
-    STALE_DIGEST,
     STATE_LOCKED,
     STORAGE_ERROR,
     SUBMISSION_FAILED,
@@ -87,6 +91,12 @@ DIGEST_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 SIMPLE_COMPONENT = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 SNAPSHOT_FILES = ("manifest.json", "endpoints.json", "bin/rp_oneshot.py")
 MAX_ERROR_MESSAGE_CHARS = 400
+# The client-facing category is stable; the template it resolves to is an
+# internal implementation detail that may change between releases.
+CATEGORY_TEMPLATES = {"sd-semireal": "unholy-sdxl"}
+DEFAULT_CATEGORY = "sd-semireal"
+SPEC_FIELDS = ("id", "category", "width", "height", "seed")
+OVERRIDE_FIELDS = ("width", "height", "seed")
 _ABSOLUTE_PATH = re.compile(r"(?<![\w:/])/(?:[^\s:'\"<>]+)")
 _SENSITIVE_ENV_MARKERS = ("KEY", "TOKEN", "SECRET", "PASSWORD")
 
@@ -95,6 +105,34 @@ _SENSITIVE_ENV_MARKERS = ("KEY", "TOKEN", "SECRET", "PASSWORD")
 class PackageSnapshot:
     digest: str
     package: Package
+
+
+@dataclass(frozen=True)
+class _Specs:
+    """The validated client specs, with the category resolved to a template."""
+
+    id: str
+    category: str
+    template: str
+    width: Optional[int] = None
+    height: Optional[int] = None
+    seed: Optional[int] = None
+
+    def canonical(self) -> dict:
+        """The client's own spec, normalized: stored for replay matching."""
+        canonical = {"id": self.id, "category": self.category}
+        for name in OVERRIDE_FIELDS:
+            value = getattr(self, name)
+            if value is not None:
+                canonical[name] = value
+        return canonical
+
+    def overrides(self) -> dict:
+        return {
+            name: getattr(self, name)
+            for name in OVERRIDE_FIELDS
+            if getattr(self, name) is not None
+        }
 
 
 class _ArtifactProblem(Exception):
@@ -234,17 +272,22 @@ class MediaRuntime:
 
     # -- planning -------------------------------------------------------
 
-    def plan(self, request: str) -> PlanResult:
+    def _validated_request(self, request) -> str:
+        """Reject a brief the planner cannot be given, before any model call."""
         if not isinstance(request, str):
-            raise ServiceError(INVALID_INPUT, "request must be a string")
+            raise ServiceError(INVALID_INPUT, "prompt must be a string")
         if not request.strip():
-            raise ServiceError(INVALID_INPUT, "request must not be empty")
+            raise ServiceError(INVALID_INPUT, "prompt must not be empty")
         if len(request) > self.config.max_request_chars:
             raise ServiceError(
                 INVALID_INPUT,
-                f"request is {len(request)} characters; the limit is "
+                f"prompt is {len(request)} characters; the limit is "
                 f"{self.config.max_request_chars}",
             )
+        return request
+
+    def plan(self, request: str, *, template: str = None) -> PlanResult:
+        request = self._validated_request(request)
         # Admission and shutdown share one lock: stop() either sees this planner
         # and drains it, or plan() sees the stopping state and rejects the call.
         with self._admission_lock:
@@ -277,6 +320,7 @@ class MediaRuntime:
                     per_call_timeout=self.config.sandbox_action_timeout_seconds,
                     max_model_requests=self.config.planner_max_model_requests,
                     plan_manifest=snapshot.package.manifest,
+                    plan_template=template,
                 )
                 result = run_agent(
                     agent, request, deadline_seconds=self.config.planner_deadline_seconds
@@ -362,80 +406,120 @@ class MediaRuntime:
 
     # -- admission and reads --------------------------------------------
 
-    def start_generation(self, plan_data, package_digest: str, request_id: str) -> JobView:
+    def start_generation(self, prompt: str, specs: dict) -> JobView:
+        """Plan one brief and enqueue the resulting paid generation.
+
+        ``specs`` is validated before the planner runs, so a malformed request
+        never spends a model call. A known ``specs.id`` is answered from the
+        store without planning: the id is the idempotency key and a planner run
+        is not reproducible, so a replay could only invent a second job. The
+        planner's template is pinned by the category, so the client-facing
+        category keeps meaning the same thing even when the package changes.
+        """
         with self._admission_lock:
             self._require_running()
-        if not isinstance(request_id, str) or not REQUEST_ID_PATTERN.fullmatch(request_id):
-            raise ServiceError(
-                INVALID_INPUT,
-                "request_id must match [A-Za-z0-9._-]{1,128}",
-            )
-        if not isinstance(package_digest, str) or not package_digest:
-            raise ServiceError(INVALID_INPUT, "package_digest must be a non-empty string")
-        # An exact retry is resolved against the request's own immutable
-        # snapshot before the current manifest is consulted, so a package edit
-        # cannot turn an already-admitted request into invalid input.
+        parsed = _parse_specs(specs)
+        request = self._validated_request(prompt)
+        # A replay is answered from the store before the live manifest or a
+        # planner is consulted, so a package edit cannot turn a retry into an
+        # error.
         with self._admission_lock:
             self._require_running()
-            existing = self._store.get_by_request_id(request_id)
+            existing = self._store.get_by_request_id(parsed.id)
         if existing is not None:
-            return self._replay_request(existing, plan_data, package_digest)
+            return self._replay_request(existing, request, parsed)
+        manifest = self._snapshot.package.manifest
+        if parsed.template not in (manifest.get("templates") or {}):
+            raise ServiceError(
+                RUNTIME_ERROR,
+                f"category {parsed.category!r} maps to a template the shipped "
+                "package does not declare",
+            )
+        self._validate_overrides(manifest, parsed)
+        if not self._generation_available():
+            raise self._generation_disabled()
+        planned = self.plan(request, template=parsed.template)
+        plan_data = {**planned.plan, "template": parsed.template, **parsed.overrides()}
+        return self._admit_plan(
+            plan_data,
+            package_digest=planned.package_digest,
+            request_text=request,
+            specs=parsed,
+            diagnostics=planned.diagnostics,
+        )
+
+    def _admit_plan(
+        self,
+        plan_data,
+        *,
+        package_digest: str,
+        request_text: str,
+        specs: _Specs,
+        diagnostics: dict,
+    ) -> JobView:
+        """Validate one planned request against the manifest and enqueue it."""
         try:
             plan = parse_plan(self._snapshot.package.manifest, plan_data)
         except PlanError as exc:
             raise ServiceError(INVALID_INPUT, self._message(exc)) from exc
         canonical = canonical_plan(plan)
-        with self._admission_lock:
-            self._require_running()
-            existing = self._store.get_by_request_id(request_id)
-        if existing is not None:
-            if existing.plan == canonical and existing.package_digest == package_digest:
-                return existing
-            raise ServiceError(
-                REQUEST_CONFLICT,
-                f"request id {request_id!r} already names a different plan or package "
-                "digest; use a new request id for a new job",
-            )
         if package_digest != self._snapshot.digest:
+            # Both values come from this process's own pinned snapshot, so this
+            # can only be an internal invariant break, never a client error.
             raise ServiceError(
-                STALE_DIGEST,
-                "package_digest does not match the package this runtime is serving; "
-                "call plan_media again and submit the digest it returns",
+                RUNTIME_ERROR,
+                "the plan was produced against a package snapshot this runtime is "
+                "not serving",
             )
-        if not self._generation_available():
-            raise self._generation_disabled()
         self._preflight(self._snapshot, canonical)
         with self._admission_lock:
             self._require_running()
             view, created = self._store.enqueue(
-                request_id=request_id,
+                request_id=specs.id,
                 plan=canonical,
                 package_digest=package_digest,
                 max_waiting_jobs=self.config.max_waiting_jobs,
+                request_text=request_text,
+                specs=specs.canonical(),
+                diagnostics=diagnostics,
             )
         if created:
             self._wake.set()
         return view
 
-    def _replay_request(
-        self, existing: JobView, plan_data, package_digest: str
-    ) -> JobView:
-        """Return the existing job only for the exact body that created it."""
-        conflict = ServiceError(
-            REQUEST_CONFLICT,
-            f"request id {existing.request_id!r} already names a different plan or "
-            "package digest; use a new request id for a new job",
-        )
-        if package_digest != existing.package_digest:
-            raise conflict
-        snapshot = self._load_snapshot(existing.package_digest)
+    def _validate_overrides(self, manifest: dict, specs: _Specs) -> None:
+        """Range-check the pixel and seed overrides with the real plan parser.
+
+        The override is parsed on its own against the pinned template, so an
+        out-of-range value is rejected before the planner runs and the merged
+        plan cannot disagree with what was accepted here.
+        """
+        if not specs.overrides():
+            return
         try:
-            plan = parse_plan(snapshot.package.manifest, plan_data)
+            parse_plan(manifest, {"template": specs.template, **specs.overrides()})
         except PlanError as exc:
-            raise conflict from exc
-        if canonical_plan(plan) == existing.plan:
+            raise ServiceError(INVALID_INPUT, self._message(exc)) from exc
+
+    def _replay_request(
+        self, existing: JobView, request_text: str, specs: _Specs
+    ) -> JobView:
+        """Return the existing job only for the exact request that created it.
+
+        The package digest is deliberately not part of the comparison: the job
+        keeps its own pinned snapshot, and a live package edit must not turn a
+        retry of the same request into a conflict.
+        """
+        if (
+            existing.request_text == request_text
+            and existing.specs == specs.canonical()
+        ):
             return existing
-        raise conflict
+        raise ServiceError(
+            REQUEST_CONFLICT,
+            "the supplied request id already names a different prompt or specs; "
+            "use a new request id for a new job",
+        )
 
     def get_generation(self, job_id: str) -> JobView:
         with self._admission_lock:
@@ -946,6 +1030,50 @@ def _uncertain_submission_message(vendor_job_id) -> str:
     return (
         "the runner did not confirm the outcome of a billable submission; check the "
         "endpoint's jobs before resubmitting"
+    )
+
+
+def _parse_specs(specs) -> _Specs:
+    """Validate the client specs strictly: no coercion, no unknown fields.
+
+    Values are only type-checked here. The pixel and seed ranges belong to the
+    plan parser, which the runtime runs against the pinned template before the
+    planner is started.
+    """
+    if not isinstance(specs, dict):
+        raise ServiceError(INVALID_INPUT, "specs must be a JSON object")
+    unknown = sorted(set(specs) - set(SPEC_FIELDS))
+    if unknown:
+        # Deliberately no echo: an unknown key can be arbitrarily long.
+        raise ServiceError(
+            INVALID_INPUT,
+            "specs has an unsupported field; accepted fields are: "
+            + ", ".join(SPEC_FIELDS),
+        )
+    request_id = specs.get("id")
+    if not isinstance(request_id, str) or not REQUEST_ID_PATTERN.fullmatch(request_id):
+        raise ServiceError(INVALID_INPUT, "specs.id must match [A-Za-z0-9._-]{1,128}")
+    category = specs.get("category", DEFAULT_CATEGORY)
+    if not isinstance(category, str) or category not in CATEGORY_TEMPLATES:
+        raise ServiceError(
+            INVALID_INPUT,
+            "specs.category must be one of: " + ", ".join(sorted(CATEGORY_TEMPLATES)),
+        )
+    overrides = {}
+    for name in OVERRIDE_FIELDS:
+        value = specs.get(name)
+        if value is None:
+            continue
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ServiceError(
+                INVALID_INPUT, f"specs.{name} must be an integer or omitted"
+            )
+        overrides[name] = value
+    return _Specs(
+        id=request_id,
+        category=category,
+        template=CATEGORY_TEMPLATES[category],
+        **overrides,
     )
 
 

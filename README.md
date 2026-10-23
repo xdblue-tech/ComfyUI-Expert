@@ -106,10 +106,16 @@ CLI and test commands are in `src/distribute_agent/README.md`.
 
 ## Private media endpoint
 
-The package also ships an optional loopback MCP endpoint that plans an image,
-submits one paid RunPod generation, and serves the validated artifact. It is
-disabled for billing until the operator passes `--enable-generation` and exports
-`RUNPOD_API_KEY`, and every MCP request needs an HS256 bearer token minted from
+The package also ships an optional MCP endpoint that plans an image, submits
+one paid RunPod generation, and serves the validated artifact. It binds
+`127.0.0.1:8000` by default and honors `MEDIAGEN_HOST`/`MEDIAGEN_PORT` when
+`--host`/`--port` are absent. The planning model (`glm-5.3-flash` through
+`http://hades.home:8317/v1`) is set by `MEDIAGEN_MODEL_ID`,
+`MEDIAGEN_MODEL_BASE_URL` and `MEDIAGEN_MODEL_API_KEY_ENV`, or the matching
+`--model-*` flags, which win. Generation is off by default and enabled by
+`--enable-generation` or a strict true `MEDIAGEN_ENABLE_GENERATION`
+(`--disable-generation` forces it off), but billing also requires
+`RUNPOD_API_KEY`. Every MCP request needs an HS256 bearer token minted from
 `MEDIAGEN_JWT_SECRET`:
 
 ```bash

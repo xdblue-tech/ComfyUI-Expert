@@ -1,7 +1,8 @@
 """FastMCP transport for the private media runtime.
 
-The server is a loopback Streamable-HTTP endpoint with JWT auth on every MCP
-request. The runtime's blocking API is called through ``asyncio.to_thread`` so a
+The server is a Streamable-HTTP endpoint bound to the configured address
+(loopback by default) with JWT auth on every MCP request. The runtime's
+blocking API is called through ``asyncio.to_thread`` so a
 plan or a SQLite read never stalls the event loop. Custom HTTP routes are added
 with ``server.custom_route`` and are *not* covered by FastMCP's MCP auth
 middleware, so the artifact download route verifies the same JWT verifier itself.
@@ -44,8 +45,8 @@ BEARER_CHALLENGE = 'Bearer realm="mediagen"'
 
 INSTRUCTIONS = (
     "Private media planning and generation endpoint. Authenticate with a bearer "
-    "token that carries the media:access scope. Use plan_media to produce a "
-    "validated plan, start_generation to submit it, and get_generation to poll "
+    "token that carries the media:access scope. Use start_generation to plan and "
+    "enqueue one generation from a prompt and specs, and get_generation to poll "
     "the job. Artifact metadata is on the job; binary artifacts are available at "
     "the media:// resource for inline reads or GET /artifacts/{job_id}/"
     "{artifact_id} for files above the inline cap. Generation is disabled unless "
@@ -61,13 +62,6 @@ _ARTIFACT_HTTP_STATUS = {
     STORAGE_ERROR: 500,
     RUNTIME_ERROR: 500,
 }
-
-
-class PlanOut(TypedDict):
-    plan: dict
-    package_digest: str
-    model_id: str
-    diagnostics: dict
 
 
 class ArtifactOut(TypedDict):
@@ -94,6 +88,7 @@ class JobOut(TypedDict):
     vendor_job_id: Optional[str]
     artifacts: list[ArtifactOut]
     error: Optional[ErrorOut]
+    diagnostics: dict
     created_at: str
     updated_at: str
     started_at: Optional[str]
@@ -105,7 +100,7 @@ def build_server(
     *,
     verifier,
 ) -> FastMCP:
-    """Register the three tools, the artifact resource and the HTTP routes."""
+    """Register the two tools, the artifact resource and the HTTP routes."""
 
     @lifespan
     async def runtime_lifespan(_server):
@@ -129,23 +124,30 @@ def build_server(
     )
 
     @server.tool
-    async def plan_media(request: str) -> PlanOut:
-        """Plan one image from a natural-language brief (no generation)."""
-        try:
-            result = await asyncio.to_thread(runtime.plan, request)
-        except ServiceError as exc:
-            raise _tool_error(exc) from exc
-        return result.as_dict()
+    async def start_generation(prompt: str, specs: dict) -> JobOut:
+        """Plan one brief and enqueue it; idempotent per specs.id.
 
-    @server.tool
-    async def start_generation(
-        plan: dict, package_digest: str, request_id: str
-    ) -> JobOut:
-        """Validate and enqueue one paid generation; idempotent per request_id."""
+        Blocks while the planning agent runs (budget: 180 seconds), then
+        enqueues the job. Retrying the same specs.id with the same prompt
+        and specs returns the stored job without re-planning or re-charging.
+
+        specs fields (unknown keys are rejected as invalid_input):
+        - id: string, required, pattern [A-Za-z0-9._-]{1,128}; the
+          idempotency key. Same id with a different prompt or specs is a
+          request_conflict.
+        - category: string, optional, default "sd-semireal"; the only valid
+          value. It selects the image template; clients must not send a
+          template directly.
+        - width, height: integers, optional; pixel overrides applied over the
+          planned image, validated against the template's allowed sizes.
+        - seed: integer, optional; seed override. Omit for the template's
+          random-seed policy.
+
+        The returned job carries planning diagnostics; poll get_generation
+        for status, the plan and artifact metadata.
+        """
         try:
-            view = await asyncio.to_thread(
-                runtime.start_generation, plan, package_digest, request_id
-            )
+            view = await asyncio.to_thread(runtime.start_generation, prompt, specs)
         except ServiceError as exc:
             raise _tool_error(exc) from exc
         return view.as_dict()

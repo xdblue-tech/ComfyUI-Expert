@@ -3,6 +3,7 @@
 import asyncio
 import base64
 import hashlib
+import sqlite3
 import tempfile
 import time
 import unittest
@@ -22,6 +23,7 @@ from service_test_support import (
     FakeSubmission,
     plan_reply,
     scripted_factory,
+    specs,
 )
 from transport_support import (
     TEST_SECRET,
@@ -69,8 +71,11 @@ class TransportCase(unittest.IsolatedAsyncioTestCase):
             headers["Authorization"] = f"Bearer {token}"
         return await http.post(MCP_PATH, json=INITIALIZE, headers=headers)
 
-    async def plan(self, client, request="a brass clock on a cliff"):
-        return await client.call_tool("plan_media", {"request": request})
+    async def start(self, client, request_id="req-1", prompt="a brass clock on a cliff", **overrides):
+        return await client.call_tool(
+            "start_generation",
+            {"prompt": prompt, "specs": specs(request_id, **overrides)},
+        )
 
 
 class DiscoveryTests(TransportCase):
@@ -81,22 +86,21 @@ class DiscoveryTests(TransportCase):
             async with running.client(headers=auth_headers()) as client:
                 tools = {tool.name: tool for tool in await client.list_tools()}
                 self.assertEqual(
-                    set(tools), {"plan_media", "start_generation", "get_generation"}
+                    set(tools), {"start_generation", "get_generation"}
                 )
-                plan_schema = tools["plan_media"].input_schema
-                self.assertEqual(plan_schema["required"], ["request"])
-                self.assertEqual(plan_schema["properties"]["request"]["type"], "string")
-                output_schema = tools["plan_media"].output_schema
+                start_schema = tools["start_generation"].input_schema
+                self.assertEqual(set(start_schema["required"]), {"prompt", "specs"})
                 self.assertEqual(
-                    set(output_schema["properties"]),
-                    {"plan", "package_digest", "model_id", "diagnostics"},
+                    start_schema["properties"]["prompt"]["type"], "string"
                 )
-                raw_plan = tools["start_generation"].input_schema["properties"]["plan"]
-                self.assertIs(raw_plan["additionalProperties"], True)
-                self.assertNotIn("seed", raw_plan.get("properties", {}))
-                generation_schema = tools["get_generation"].output_schema
-                self.assertIn("artifacts", generation_schema["properties"])
-                self.assertIn("vendor_job_id", generation_schema["properties"])
+                raw_specs = start_schema["properties"]["specs"]
+                self.assertIs(raw_specs["additionalProperties"], True)
+                self.assertNotIn("seed", raw_specs.get("properties", {}))
+                for name in ("start_generation", "get_generation"):
+                    generation_schema = tools[name].output_schema
+                    self.assertIn("artifacts", generation_schema["properties"])
+                    self.assertIn("vendor_job_id", generation_schema["properties"])
+                    self.assertIn("diagnostics", generation_schema["properties"])
 
                 templates = await client.list_resource_templates()
                 self.assertEqual(
@@ -149,30 +153,66 @@ class AuthenticationTests(TransportCase):
 
 
 class PlanningToolTests(TransportCase):
-    async def test_plan_media_returns_the_strict_plan_and_bounded_diagnostics(self):
+    async def test_start_generation_returns_the_planned_job_and_diagnostics(self):
         factory, _ = scripted_factory([plan_reply(VALID_PLAN)])
         runtime, _ = make_runtime(self._tmp.name, model_factory=factory, submission=FakeSubmission())
         async with asgi_server(make_server(runtime)) as running:
             async with running.client(headers=auth_headers()) as client:
-                result = await self.plan(client)
+                result = await self.start(client)
         data = result.structured_content
+        self.assertEqual(data["status"], "queued")
+        self.assertEqual(data["request_id"], "req-1")
         self.assertEqual(data["plan"]["seed"], 42)
         self.assertEqual(data["plan"]["width"], 832)
         self.assertEqual(data["plan"]["height"], 1216)
         self.assertEqual(len(data["package_digest"]), 64)
-        self.assertEqual(data["model_id"], "scripted-deterministic")
         self.assertLessEqual(
             set(data["diagnostics"]),
             {"duration_seconds", "model_requests", "agent_steps", "validated_previews", "state"},
         )
         self.assertEqual(data["diagnostics"]["model_requests"], 1)
+        self.assertEqual(data["artifacts"], [])
+        self.assertIsNone(data["error"])
+
+    async def test_specs_overrides_replace_the_planned_values(self):
+        factory, _ = scripted_factory([plan_reply(VALID_PLAN)])
+        runtime, _ = make_runtime(self._tmp.name, model_factory=factory, submission=FakeSubmission())
+        async with asgi_server(make_server(runtime)) as running:
+            async with running.client(headers=auth_headers()) as client:
+                result = await self.start(client, width=1024, height=1024, seed=7)
+        plan = result.structured_content["plan"]
+        self.assertEqual((plan["width"], plan["height"], plan["seed"]), (1024, 1024, 7))
 
     async def test_empty_request_is_code_prefixed(self):
         runtime, _ = make_runtime(self._tmp.name, generation_enabled=False)
         async with asgi_server(make_server(runtime)) as running:
             async with running.client(headers=auth_headers()) as client:
                 with self.assertRaises(ToolError) as caught:
-                    await client.call_tool("plan_media", {"request": "   "})
+                    await self.start(client, prompt="   ")
+        self.assertTrue(str(caught.exception).startswith("invalid_input:"))
+
+    async def test_unknown_category_is_code_prefixed_and_lists_the_valid_ones(self):
+        runtime, _ = make_runtime(self._tmp.name, generation_enabled=False)
+        async with asgi_server(make_server(runtime)) as running:
+            async with running.client(headers=auth_headers()) as client:
+                with self.assertRaises(ToolError) as caught:
+                    await self.start(client, category="sd-photoreal")
+        message = str(caught.exception)
+        self.assertTrue(message.startswith("invalid_input:"))
+        self.assertIn("sd-semireal", message)
+
+    async def test_unknown_specs_field_is_refused(self):
+        runtime, _ = make_runtime(self._tmp.name, generation_enabled=False)
+        async with asgi_server(make_server(runtime)) as running:
+            async with running.client(headers=auth_headers()) as client:
+                with self.assertRaises(ToolError) as caught:
+                    await client.call_tool(
+                        "start_generation",
+                        {
+                            "prompt": "a brass clock",
+                            "specs": {"id": "req-1", "package_digest": "0" * 64},
+                        },
+                    )
         self.assertTrue(str(caught.exception).startswith("invalid_input:"))
 
     async def test_planning_failure_is_redacted_and_bounded(self):
@@ -185,7 +225,7 @@ class PlanningToolTests(TransportCase):
         async with asgi_server(make_server(runtime)) as running:
             async with running.client(headers=auth_headers()) as client:
                 with self.assertRaises(ToolError) as caught:
-                    await self.plan(client)
+                    await self.start(client)
         message = str(caught.exception)
         self.assertTrue(message.startswith("plan_failed:"))
         self.assertNotIn(TEST_KEY, message)
@@ -193,6 +233,24 @@ class PlanningToolTests(TransportCase):
         self.assertNotIn("DO_NOT_PUBLISH_123", message)
         self.assertNotIn("provider body", message)
         self.assertLessEqual(len(message), 400 + len("plan_failed: "))
+
+    async def test_a_planning_failure_leaves_no_job_row(self):
+        def broken_model():
+            raise RuntimeError("provider body DO_NOT_PUBLISH_123")
+
+        runtime, config = make_runtime(self._tmp.name, model_factory=broken_model)
+        async with asgi_server(make_server(runtime)) as running:
+            async with running.client(headers=auth_headers()) as client:
+                with self.assertRaises(ToolError) as caught:
+                    await self.start(client)
+        self.assertTrue(str(caught.exception).startswith("plan_failed:"))
+        connection = sqlite3.connect(config.database_path)
+        try:
+            self.assertEqual(
+                connection.execute("SELECT COUNT(*) FROM jobs").fetchone()[0], 0
+            )
+        finally:
+            connection.close()
 
     async def test_a_second_planner_is_rejected_as_busy(self):
         models = []
@@ -206,13 +264,11 @@ class PlanningToolTests(TransportCase):
         try:
             async with asgi_server(make_server(runtime)) as running:
                 async with running.client(headers=auth_headers()) as client:
-                    first = asyncio.create_task(
-                        client.call_tool("plan_media", {"request": "first brief"})
-                    )
+                    first = asyncio.create_task(self.start(client, "req-1", "first brief"))
                     while not models or not models[0].started.is_set():
                         await asyncio.sleep(0.01)
                     with self.assertRaises(ToolError) as caught:
-                        await self.plan(client, "second brief")
+                        await self.start(client, "req-2", "second brief")
                     self.assertTrue(str(caught.exception).startswith("busy:"))
                     models[0].release.set()
                     self.assertEqual(
@@ -227,24 +283,24 @@ class PlanningToolTests(TransportCase):
         async with asgi_server(make_server(runtime)) as running:
             async with running.client(headers=auth_headers()) as client:
                 with self.assertRaises(ToolError) as caught:
-                    await self.plan(client, "x" * 8193)
+                    await self.start(client, prompt="x" * 8193)
         self.assertTrue(str(caught.exception).startswith("invalid_input:"))
         self.assertIn("8192", str(caught.exception))
 
-    async def test_plan_argument_cannot_be_smuggled_as_untyped_json(self):
+    async def test_specs_cannot_be_smuggled_as_untyped_json(self):
         runtime, _ = make_runtime(self._tmp.name, generation_enabled=False)
         async with asgi_server(make_server(runtime)) as running:
             async with running.client(headers=auth_headers()) as client:
                 with self.assertRaises(ToolError):
                     await client.call_tool(
                         "start_generation",
-                        {"plan": "not-an-object", "package_digest": "x", "request_id": "r"},
+                        {"prompt": "a brass clock", "specs": "not-an-object"},
                     )
 
 
 class GenerationToolTests(TransportCase):
     async def test_generation_is_disabled_without_the_operator_flag(self):
-        factory, _ = scripted_factory([plan_reply(VALID_PLAN)])
+        factory, models = scripted_factory([plan_reply(VALID_PLAN)])
         submission = FakeSubmission()
         runtime, _ = make_runtime(
             self._tmp.name,
@@ -254,18 +310,11 @@ class GenerationToolTests(TransportCase):
         )
         async with asgi_server(make_server(runtime)) as running:
             async with running.client(headers=auth_headers()) as client:
-                plan = await self.plan(client)
                 with self.assertRaises(ToolError) as caught:
-                    await client.call_tool(
-                        "start_generation",
-                        {
-                            "plan": plan.structured_content["plan"],
-                            "package_digest": plan.structured_content["package_digest"],
-                            "request_id": "req-disabled",
-                        },
-                    )
+                    await self.start(client, "req-disabled")
         self.assertTrue(str(caught.exception).startswith("generation_disabled:"))
         self.assertEqual(submission.calls, [])
+        self.assertEqual(models, [])
 
     async def test_generation_is_disabled_without_the_vendor_key(self):
         factory, _ = scripted_factory([plan_reply(VALID_PLAN)])
@@ -277,35 +326,11 @@ class GenerationToolTests(TransportCase):
         )
         async with asgi_server(make_server(runtime)) as running:
             async with running.client(headers=auth_headers()) as client:
-                plan = await self.plan(client)
                 with self.assertRaises(ToolError) as caught:
-                    await client.call_tool(
-                        "start_generation",
-                        {
-                            "plan": plan.structured_content["plan"],
-                            "package_digest": plan.structured_content["package_digest"],
-                            "request_id": "req-no-key",
-                        },
-                    )
+                    await self.start(client, "req-no-key")
         self.assertTrue(str(caught.exception).startswith("generation_disabled:"))
 
-    async def test_stale_digest_is_refused(self):
-        factory, _ = scripted_factory([plan_reply(VALID_PLAN)])
-        runtime, _ = make_runtime(self._tmp.name, model_factory=factory, submission=FakeSubmission())
-        async with asgi_server(make_server(runtime)) as running:
-            async with running.client(headers=auth_headers()) as client:
-                with self.assertRaises(ToolError) as caught:
-                    await client.call_tool(
-                        "start_generation",
-                        {
-                            "plan": VALID_PLAN,
-                            "package_digest": "0" * 64,
-                            "request_id": "req-stale",
-                        },
-                    )
-        self.assertTrue(str(caught.exception).startswith("stale_digest:"))
-
-    async def test_numeric_strings_are_not_coerced_in_the_plan(self):
+    async def test_numeric_strings_are_not_coerced_in_the_specs(self):
         factory, _ = scripted_factory([plan_reply(VALID_PLAN)])
         submission = FakeSubmission()
         runtime, _ = make_runtime(
@@ -313,15 +338,12 @@ class GenerationToolTests(TransportCase):
         )
         async with asgi_server(make_server(runtime)) as running:
             async with running.client(headers=auth_headers()) as client:
-                plan = await self.plan(client)
-                bad = dict(plan.structured_content["plan"], seed="42")
                 with self.assertRaises(ToolError) as caught:
                     await client.call_tool(
                         "start_generation",
                         {
-                            "plan": bad,
-                            "package_digest": plan.structured_content["package_digest"],
-                            "request_id": "req-raw",
+                            "prompt": "a brass clock",
+                            "specs": {"id": "req-raw", "seed": "42"},
                         },
                     )
         self.assertTrue(str(caught.exception).startswith("invalid_input:"))
@@ -329,7 +351,7 @@ class GenerationToolTests(TransportCase):
         self.assertEqual(submission.calls, [])
 
     async def test_duplicate_request_id_submits_once_and_changed_body_conflicts(self):
-        factory, _ = scripted_factory([plan_reply(VALID_PLAN)])
+        factory, models = scripted_factory([plan_reply(VALID_PLAN)])
         submission = FakeSubmission()
         submission.block()
         runtime, _ = make_runtime(
@@ -338,23 +360,14 @@ class GenerationToolTests(TransportCase):
         try:
             async with asgi_server(make_server(runtime)) as running:
                 async with running.client(headers=auth_headers()) as client:
-                    plan = await self.plan(client)
-                    body = {
-                        "plan": plan.structured_content["plan"],
-                        "package_digest": plan.structured_content["package_digest"],
-                        "request_id": "req-duplicate",
-                    }
-                    first, second = await asyncio.gather(
-                        client.call_tool("start_generation", body),
-                        client.call_tool("start_generation", body),
-                    )
+                    first = await self.start(client, "req-duplicate")
+                    second = await self.start(client, "req-duplicate")
                     self.assertEqual(
                         first.structured_content["job_id"],
                         second.structured_content["job_id"],
                     )
-                    changed = dict(body, plan=dict(body["plan"], prompt="a different brief"))
                     with self.assertRaises(ToolError) as caught:
-                        await client.call_tool("start_generation", changed)
+                        await self.start(client, "req-duplicate", "a different brief")
                     self.assertTrue(str(caught.exception).startswith("request_conflict:"))
                     submission.unblock()
                     job = await self.wait_for_status(
@@ -362,6 +375,8 @@ class GenerationToolTests(TransportCase):
                     )
             self.assertEqual(job.status, "succeeded")
             self.assertEqual(len(submission.calls), 1)
+            # The replay was answered from the store, not by planning again.
+            self.assertEqual(len(models), 1)
         finally:
             submission.unblock()
 
@@ -374,15 +389,7 @@ class GenerationToolTests(TransportCase):
         )
         async with asgi_server(make_server(runtime)) as running:
             async with running.client(headers=auth_headers()) as client:
-                plan = await self.plan(client)
-                job = await client.call_tool(
-                    "start_generation",
-                    {
-                        "plan": plan.structured_content["plan"],
-                        "package_digest": plan.structured_content["package_digest"],
-                        "request_id": "req-vendor-body",
-                    },
-                )
+                job = await self.start(client, "req-vendor-body")
                 await self.wait_for_status(
                     runtime,
                     job.structured_content["job_id"],
@@ -396,6 +403,9 @@ class GenerationToolTests(TransportCase):
         self.assertEqual(data["vendor_job_id"], "vendor-77")
         self.assertEqual(data["error"]["code"], "submission_uncertain")
         self.assertTrue(data["error"]["may_have_submitted"])
+        self.assertEqual(set(data["diagnostics"]),
+                         {"duration_seconds", "model_requests", "agent_steps",
+                          "validated_previews", "state"})
         for marker in (
             "DO_NOT_PUBLISH_123",
             "vendor_private_body",
@@ -422,15 +432,7 @@ class GenerationToolTests(TransportCase):
         try:
             async with asgi_server(make_server(runtime)) as running:
                 async with running.client(headers=auth_headers()) as client:
-                    plan = await self.plan(client)
-                    job = await client.call_tool(
-                        "start_generation",
-                        {
-                            "plan": plan.structured_content["plan"],
-                            "package_digest": plan.structured_content["package_digest"],
-                            "request_id": "req-disconnect",
-                        },
-                    )
+                    job = await self.start(client, "req-disconnect")
                 # The client and its HTTP session are gone; the worker is independent.
                 submission.unblock()
                 view = await self.wait_for_status(
@@ -461,17 +463,9 @@ class ArtifactTests(TransportCase):
         return runtime, config, server
 
     async def start_and_wait(self, runtime, client):
-        plan = await self.plan(client)
-        job = await client.call_tool(
-            "start_generation",
-            {
-                "plan": plan.structured_content["plan"],
-                "package_digest": plan.structured_content["package_digest"],
-                "request_id": "req-artifact",
-            },
-        )
+        job = await self.start(client, "req-artifact")
         view = await self.wait_for_status(runtime, job.structured_content["job_id"])
-        return plan, job.structured_content["job_id"], view
+        return job, job.structured_content["job_id"], view
 
     async def test_resource_returns_exact_validated_bytes_and_metadata(self):
         runtime, _, server = self.make_completed_job()

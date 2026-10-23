@@ -26,7 +26,6 @@ from distribute_agent.service.types import (
     REQUEST_CONFLICT,
     SHUTTING_DOWN,
     SNAPSHOT_UNAVAILABLE,
-    STALE_DIGEST,
     STATE_LOCKED,
     RUNTIME_ERROR,
     ServiceError,
@@ -41,6 +40,7 @@ from service_test_support import (
     plan_reply,
     read_manifest,
     scripted_factory,
+    specs,
     wait_for_job,
     wait_until,
     write_manifest,
@@ -181,124 +181,237 @@ class PlanningTests(RuntimeTestCase):
 
 
 class AdmissionTests(RuntimeTestCase):
-    def test_invalid_plan_values_are_not_coerced(self):
-        runtime = self.start_runtime(factory=self.plain_factory())
-        result = runtime.plan("plan one")
+    def test_invalid_specs_are_not_coerced(self):
+        factory, models = scripted_factory([plan_reply(VALID_PLAN)])
+        runtime = self.start_runtime(factory=factory)
         cases = {
             "not-an-object": ["unholy-sdxl"],
-            "numeric-seed": {**VALID_PLAN, "seed": "42"},
-            "boolean-seed": {**VALID_PLAN, "seed": True},
-            "unknown-field": {**VALID_PLAN, "command": "rm -rf /"},
-            "unknown-template": {**VALID_PLAN, "template": "missing"},
-            "image-field": {**VALID_PLAN, "image": "/etc/passwd"},
+            "missing-id": {},
+            "numeric-id": {"id": 7},
+            "numeric-seed": specs(seed="42"),
+            "boolean-seed": specs(seed=True),
+            "unknown-field": specs(command="rm -rf /"),
+            "unknown-category": specs(category="video"),
+            "fractional-width": specs(width=832.5),
         }
-        for label, plan in cases.items():
+        for label, value in cases.items():
             with self.subTest(case=label):
                 with self.assertRaises(ServiceError) as caught:
-                    runtime.start_generation(plan, result.package_digest, f"req-{label}")
+                    runtime.start_generation("plan one", value)
                 self.assertEqual(caught.exception.code, INVALID_INPUT)
+        self.assertEqual(models, [])
         self.assertEqual(self.fake.calls, [])
         self.assertEqual(self.job_count(), 0)
 
-    def test_request_id_and_digest_are_validated(self):
+    def test_out_of_range_override_is_rejected_before_any_model_call(self):
+        factory, models = scripted_factory([plan_reply(VALID_PLAN)])
+        runtime = self.start_runtime(factory=factory)
+        # 0 is below the plan parser's 1-pixel floor, so the override is
+        # range-checked against the pinned template before a planner exists.
+        with self.assertRaises(ServiceError) as caught:
+            runtime.start_generation("plan one", specs(width=0))
+        self.assertEqual(caught.exception.code, INVALID_INPUT)
+        self.assertEqual(models, [])
+        self.assertEqual(self.fake.calls, [])
+        self.assertEqual(self.job_count(), 0)
+
+    def test_unknown_category_lists_the_valid_categories(self):
         runtime = self.start_runtime(factory=self.plain_factory())
-        result = runtime.plan("plan one")
-        for request_id in ("", "has space", "slash/id", "x" * 129):
+        with self.assertRaises(ServiceError) as caught:
+            runtime.start_generation("plan one", specs(category="sd-photoreal"))
+        self.assertEqual(caught.exception.code, INVALID_INPUT)
+        self.assertIn("sd-semireal", caught.exception.message)
+        self.assertEqual(self.job_count(), 0)
+
+    def test_unknown_specs_field_lists_the_accepted_fields(self):
+        runtime = self.start_runtime(factory=self.plain_factory())
+        with self.assertRaises(ServiceError) as caught:
+            runtime.start_generation("plan one", specs(package_digest="a" * 64))
+        self.assertEqual(caught.exception.code, INVALID_INPUT)
+        self.assertNotIn("a" * 64, caught.exception.message)
+        for name in ("id", "category", "width", "height", "seed"):
+            self.assertIn(name, caught.exception.message)
+
+    def test_specs_id_is_validated(self):
+        runtime = self.start_runtime(factory=self.plain_factory())
+        for request_id in (None, "", "has space", "slash/id", "x" * 129):
             with self.subTest(request_id=request_id):
                 with self.assertRaises(ServiceError) as caught:
-                    runtime.start_generation(VALID_PLAN, result.package_digest, request_id)
+                    runtime.start_generation("plan one", {"id": request_id})
                 self.assertEqual(caught.exception.code, INVALID_INPUT)
-        with self.assertRaises(ServiceError) as caught:
-            runtime.start_generation(VALID_PLAN, "", "req-1")
-        self.assertEqual(caught.exception.code, INVALID_INPUT)
-
-    def test_a_stale_package_digest_is_rejected_before_enqueue(self):
-        runtime = self.start_runtime(factory=self.plain_factory())
-        runtime.plan("plan one")
-        with self.assertRaises(ServiceError) as caught:
-            runtime.start_generation(VALID_PLAN, "b" * 64, "req-1")
-        self.assertEqual(caught.exception.code, STALE_DIGEST)
-        self.assertEqual(self.fake.calls, [])
         self.assertEqual(self.job_count(), 0)
 
-    def test_duplicate_request_returns_the_same_job_and_conflict_rejects_change(self):
+    def test_overrides_are_applied_over_the_planned_values(self):
         runtime = self.start_runtime(factory=self.plain_factory())
-        result = runtime.plan("plan one")
-        self.fake.block()
-        first = runtime.start_generation(VALID_PLAN, result.package_digest, "req-1")
-        second = runtime.start_generation(VALID_PLAN, result.package_digest, "req-1")
-        self.assertEqual(first.job_id, second.job_id)
-        with self.assertRaises(ServiceError) as caught:
-            runtime.start_generation(
-                {**VALID_PLAN, "prompt": "a different image"},
-                result.package_digest,
-                "req-1",
-            )
-        self.assertEqual(caught.exception.code, REQUEST_CONFLICT)
-        self.fake.unblock()
-        done = wait_for_job(runtime, first.job_id, {"succeeded"})
-        self.assertEqual(done.status, "succeeded")
-        again = runtime.start_generation(VALID_PLAN, result.package_digest, "req-1")
-        self.assertEqual(again.job_id, first.job_id)
-        self.assertEqual(len(self.fake.calls), 1)
+        view = runtime.start_generation(
+            "plan one", specs(width=1024, height=1024, seed=7)
+        )
+        self.assertEqual(view.plan["width"], 1024)
+        self.assertEqual(view.plan["height"], 1024)
+        self.assertEqual(view.plan["seed"], 7)
+        self.assertEqual(view.plan["template"], VALID_PLAN["template"])
+        self.assertEqual(view.plan["prompt"], VALID_PLAN["prompt"])
+        done = wait_for_job(runtime, view.job_id, {"succeeded"})
+        self.assertEqual(self.fake.calls[0]["plan"], dict(view.plan))
+        self.assertEqual(done.plan, dict(view.plan))
+
+    def test_omitted_overrides_keep_the_planned_values(self):
+        runtime = self.start_runtime(factory=self.plain_factory())
+        view = runtime.start_generation("plan one", specs())
+        self.assertEqual(view.plan, VALID_PLAN)
+
+    def test_a_replay_does_not_run_the_planner_again(self):
+        factory, models = scripted_factory([plan_reply(VALID_PLAN)])
+        runtime = self.start_runtime(factory=factory)
+        first = runtime.start_generation("plan one", specs(width=1024))
+        again = runtime.start_generation("plan one", specs(width=1024))
+        self.assertEqual(first.job_id, again.job_id)
+        self.assertEqual(again.status, "queued")
+        self.assertEqual(len(models), 1)
+        self.assertEqual(self.job_count(), 1)
+
+    def test_replaying_an_id_with_a_changed_prompt_or_specs_conflicts(self):
+        factory, models = scripted_factory([plan_reply(VALID_PLAN)])
+        runtime = self.start_runtime(factory=factory)
+        first = runtime.start_generation("plan one", specs())
+        for label, prompt, value in (
+            ("prompt", "a different brief", specs()),
+            ("width", "plan one", specs(width=1024)),
+            ("seed", "plan one", specs(seed=1)),
+        ):
+            with self.subTest(case=label):
+                with self.assertRaises(ServiceError) as caught:
+                    runtime.start_generation(prompt, value)
+                self.assertEqual(caught.exception.code, REQUEST_CONFLICT)
+                self.assertNotIn("req-1", caught.exception.message)
+        self.assertEqual(len(models), 1)
+        self.assertEqual(self.job_count(), 1)
+        self.assertEqual(first.request_id, "req-1")
 
     def test_concurrent_duplicate_admissions_create_one_job_and_one_submission(self):
-        runtime = self.start_runtime(factory=self.plain_factory())
-        result = runtime.plan("plan one")
+        factory, models = scripted_factory([plan_reply(VALID_PLAN)])
+        runtime = self.start_runtime(factory=factory)
         barrier = threading.Barrier(4)
         outcomes = []
 
         def submit():
             barrier.wait()
-            outcomes.append(
-                runtime.start_generation(VALID_PLAN, result.package_digest, "req-race")
-            )
+            try:
+                outcomes.append(("ok", runtime.start_generation("plan one", specs())))
+            except ServiceError as exc:
+                outcomes.append(("error", exc.code))
 
         threads = [threading.Thread(target=submit) for _ in range(4)]
         for thread in threads:
             thread.start()
         for thread in threads:
             thread.join(20)
-        self.assertEqual(len({view.job_id for view in outcomes}), 1)
-        wait_for_job(runtime, outcomes[0].job_id, {"succeeded"})
+        winners = [value for status, value in outcomes if status == "ok"]
+        losers = [value for status, value in outcomes if status == "error"]
+        self.assertTrue(winners, outcomes)
+        self.assertEqual(len({view.job_id for view in winners}), 1)
+        # One planner runs at a time, so a concurrent duplicate either replays the
+        # same job or is told the planner is busy; it never creates a second job.
+        self.assertEqual(set(losers) - {BUSY}, set(), outcomes)
+        wait_for_job(runtime, winners[0].job_id, {"succeeded"})
+        self.assertEqual(self.job_count(), 1)
         self.assertEqual(len(self.fake.calls), 1)
+        self.assertEqual(len(models), len(winners))
 
-    def test_concurrent_conflicting_admissions_leave_one_winner(self):
-        runtime = self.start_runtime(factory=self.plain_factory())
-        result = runtime.plan("plan one")
-        barrier = threading.Barrier(2)
+    def test_duplicate_admissions_that_both_miss_the_replay_share_one_job(self):
+        # The replay lookup, the planner and the insert are not one step: two
+        # calls with one request id can both miss the lookup and plan
+        # separately. The second insert must still resolve to the first job.
+        plans = [
+            {**VALID_PLAN, "prompt": "the first stochastic plan", "seed": 11},
+            {**VALID_PLAN, "prompt": "a second stochastic plan", "seed": 22},
+        ]
+        models = []
+
+        def factory():
+            model = ScriptedModel([plan_reply(plans[len(models)])])
+            models.append(model)
+            return model
+
+        runtime = self.start_runtime(factory=factory)
+        first_in_preflight = threading.Event()
+        second_lookup_done = threading.Event()
+        first_admitted = threading.Event()
+        guard = threading.Lock()
+        lookups = []
+        preflight_calls = []
+        enqueue_calls = []
+        created_flags = []
+        real_lookup = runtime._store.get_by_request_id
+        real_preflight = runtime._preflight
+        real_enqueue = runtime._store.enqueue
+
+        def lookup(request_id):
+            view = real_lookup(request_id)
+            with guard:
+                lookups.append(request_id)
+                is_second = len(lookups) == 2
+            if is_second:
+                second_lookup_done.set()
+            return view
+
+        def gated_preflight(snapshot, plan):
+            with guard:
+                preflight_calls.append(plan)
+                is_first = len(preflight_calls) == 1
+            if is_first:
+                # The first call has planned; hold it before its insert until
+                # the second call has taken its lookup and missed.
+                first_in_preflight.set()
+                self.assertTrue(second_lookup_done.wait(10))
+            else:
+                # The second call planned a different stochastic value; let the
+                # first call insert so this one has to match on identity.
+                self.assertTrue(first_admitted.wait(10))
+            real_preflight(snapshot, plan)
+
+        def recording_enqueue(**kwargs):
+            view, inserted = real_enqueue(**kwargs)
+            with guard:
+                enqueue_calls.append(dict(kwargs))
+                created_flags.append(inserted)
+            if inserted:
+                first_admitted.set()
+            return view, inserted
+
+        runtime._store.get_by_request_id = lookup
+        runtime._preflight = gated_preflight
+        runtime._store.enqueue = recording_enqueue
         outcomes = []
 
-        def submit(prompt):
-            barrier.wait()
+        def submit():
             try:
                 outcomes.append(
-                    (
-                        "ok",
-                        runtime.start_generation(
-                            {**VALID_PLAN, "prompt": prompt},
-                            result.package_digest,
-                            "req-conflict",
-                        ),
-                    )
+                    ("ok", runtime.start_generation("plan one", specs("req-race")))
                 )
-            except Exception as exc:
-                outcomes.append(("error", exc))
+            except ServiceError as exc:
+                outcomes.append(("error", exc.code))
 
-        threads = [
-            threading.Thread(target=submit, args=("left",)),
-            threading.Thread(target=submit, args=("right",)),
-        ]
-        for thread in threads:
-            thread.start()
-        for thread in threads:
-            thread.join(20)
-        winners = [value for status, value in outcomes if status == "ok"]
-        errors = [value for status, value in outcomes if status == "error"]
-        self.assertEqual(len(winners), 1, outcomes)
-        self.assertEqual([error.code for error in errors], [REQUEST_CONFLICT])
-        wait_for_job(runtime, winners[0].job_id, {"succeeded"})
+        first = threading.Thread(target=submit)
+        first.start()
+        self.assertTrue(first_in_preflight.wait(10))
+        second = threading.Thread(target=submit)
+        second.start()
+        first.join(20)
+        second.join(20)
+        self.assertEqual([status for status, _ in outcomes], ["ok", "ok"], outcomes)
+        views = [value for _, value in outcomes]
+        self.assertEqual(len(lookups), 2)
+        self.assertEqual(len({view.job_id for view in views}), 1, outcomes)
+        self.assertEqual(created_flags, [True, False], outcomes)
+        self.assertNotEqual(enqueue_calls[1]["plan"], enqueue_calls[0]["plan"])
+        job = runtime.get_generation(views[0].job_id)
+        self.assertEqual(job.plan, plans[0])
+        self.assertEqual(job.diagnostics, enqueue_calls[0]["diagnostics"])
+        wait_for_job(runtime, job.job_id, {"succeeded"})
+        self.assertEqual(self.job_count(), 1)
         self.assertEqual(len(self.fake.calls), 1)
+        self.assertEqual(len(models), 2)
 
     def test_generation_is_disabled_without_the_flag(self):
         config = replace(
@@ -307,49 +420,50 @@ class AdmissionTests(RuntimeTestCase):
             state_dir=Path(self.temporary.name) / "disabled-state",
             output_dir=Path(self.temporary.name) / "disabled-output",
         )
-        runtime = self.start_runtime(config=config, factory=self.plain_factory())
-        result = runtime.plan("plan one")
+        factory, models = scripted_factory([plan_reply(VALID_PLAN)])
+        runtime = self.start_runtime(config=config, factory=factory)
         with self.assertRaises(ServiceError) as caught:
-            runtime.start_generation(VALID_PLAN, result.package_digest, "req-1")
+            runtime.start_generation("plan one", specs())
         self.assertEqual(caught.exception.code, GENERATION_DISABLED)
+        # A disabled generation must not spend a model call.
+        self.assertEqual(models, [])
         self.assertEqual(self.fake.calls, [])
 
     def test_generation_stays_disabled_without_the_runpod_key(self):
-        runtime = self.start_runtime(factory=self.plain_factory(), env={})
-        result = runtime.plan("plan one")
+        factory, models = scripted_factory([plan_reply(VALID_PLAN)])
+        runtime = self.start_runtime(factory=factory, env={})
         with self.assertRaises(ServiceError) as caught:
-            runtime.start_generation(VALID_PLAN, result.package_digest, "req-1")
+            runtime.start_generation("plan one", specs())
         self.assertEqual(caught.exception.code, GENERATION_DISABLED)
         self.assertIn("RUNPOD_API_KEY", caught.exception.message)
+        self.assertEqual(models, [])
         self.assertEqual(self.fake.calls, [])
 
     def test_waiting_queue_rejects_admission_above_the_limit(self):
         self.config = replace(self.config, max_waiting_jobs=2)
         self.fake.block()
         runtime = self.start_runtime(config=self.config, factory=self.plain_factory())
-        result = runtime.plan("plan one")
-        first = runtime.start_generation(VALID_PLAN, result.package_digest, "req-1")
+        first = runtime.start_generation("plan one", specs("req-1"))
         self.assertTrue(self.fake.entered.wait(10))
-        runtime.start_generation(VALID_PLAN, result.package_digest, "req-2")
-        runtime.start_generation(VALID_PLAN, result.package_digest, "req-3")
+        runtime.start_generation("plan one", specs("req-2"))
+        runtime.start_generation("plan one", specs("req-3"))
         with self.assertRaises(ServiceError) as caught:
-            runtime.start_generation(VALID_PLAN, result.package_digest, "req-4")
+            runtime.start_generation("plan one", specs("req-4"))
         self.assertEqual(caught.exception.code, CAPACITY)
         self.fake.unblock()
         wait_for_job(runtime, first.job_id, {"succeeded"})
+        self.assertEqual(self.job_count(), 3)
 
     def test_preflight_accepts_template_default_dimensions(self):
-        runtime = self.start_runtime(factory=self.plain_factory())
         plan = {"template": "unholy-sdxl", "prompt": "defaults", "seed": 7}
-        result = runtime.plan("plan defaults")
-        view = runtime.start_generation(plan, result.package_digest, "req-defaults")
+        runtime = self.start_runtime(factory=self.plain_factory(plan))
+        view = runtime.start_generation("plan defaults", specs("req-defaults"))
         done = wait_for_job(runtime, view.job_id, {"succeeded"})
         self.assertEqual(done.plan, plan)
         self.assertEqual(self.fake.calls[0]["plan"], plan)
 
     def test_preflight_rejects_effective_dimensions_over_decoder_caps(self):
         runtime = self.start_runtime(factory=self.plain_factory())
-        result = runtime.plan("plan one")
         cases = {
             "side": {"width": 16376, "height": 1216},
             "pixels": {"width": 8192, "height": 4096},
@@ -358,7 +472,7 @@ class AdmissionTests(RuntimeTestCase):
             with self.subTest(case=label):
                 with self.assertRaises(ServiceError) as caught:
                     runtime.start_generation(
-                        {**VALID_PLAN, **changes}, result.package_digest, f"req-{label}"
+                        "plan one", specs(f"req-{label}", **changes)
                     )
                 self.assertEqual(caught.exception.code, INVALID_INPUT)
         self.assertEqual(self.fake.calls, [])
@@ -366,11 +480,8 @@ class AdmissionTests(RuntimeTestCase):
 
     def test_preflight_accepts_the_exact_decoder_pixel_limit(self):
         runtime = self.start_runtime(factory=self.plain_factory())
-        result = runtime.plan("plan one")
         view = runtime.start_generation(
-            {**VALID_PLAN, "width": 8192, "height": 2048},
-            result.package_digest,
-            "req-limit",
+            "plan one", specs("req-limit", width=8192, height=2048)
         )
         wait_for_job(runtime, view.job_id, {"succeeded"})
         self.assertEqual(len(self.fake.calls), 1)
@@ -379,9 +490,8 @@ class AdmissionTests(RuntimeTestCase):
         workflow = self.config.package_root / "workflows" / "unholy-sdxl.json"
         workflow.write_text("{not valid json", encoding="utf-8")
         runtime = self.start_runtime(factory=self.plain_factory())
-        result = runtime.plan("plan one")
         with self.assertRaises(ServiceError) as caught:
-            runtime.start_generation(VALID_PLAN, result.package_digest, "req-1")
+            runtime.start_generation("plan one", specs())
         self.assertEqual(caught.exception.code, PLAN_FAILED)
         self.assertIn("[path]", caught.exception.message)
         self.assertNotIn(str(self.config.package_root), caught.exception.message)
@@ -391,18 +501,25 @@ class AdmissionTests(RuntimeTestCase):
 
     def test_preflight_detail_is_credential_and_path_scrubbed(self):
         runtime = self.start_runtime(factory=self.plain_factory())
-        planned = runtime.plan("plan one")
         completed = subprocess.CompletedProcess(
             args=["runner"],
             returncode=1,
             stdout="",
             stderr=f"failed with {TEST_KEY} at /home/user/private\n",
         )
+        real_run = subprocess.run
+
+        def fake_run(argv, **kwargs):
+            # Only the preflight dry-run fails; the planner's sandbox still runs.
+            if "--dry-run" in argv:
+                return completed
+            return real_run(argv, **kwargs)
+
         with mock.patch(
-            "distribute_agent.service.runtime.subprocess.run", return_value=completed
+            "distribute_agent.service.runtime.subprocess.run", side_effect=fake_run
         ):
             with self.assertRaises(ServiceError) as caught:
-                runtime.start_generation(VALID_PLAN, planned.package_digest, "req-1")
+                runtime.start_generation("plan one", specs())
         self.assertEqual(caught.exception.code, PLAN_FAILED)
         self.assertNotIn(TEST_KEY, caught.exception.message)
         self.assertIn("[redacted]", caught.exception.message)
@@ -415,9 +532,8 @@ class AdmissionTests(RuntimeTestCase):
         manifest["templates"]["unholy-sdxl"]["image"] = {"node": "7"}
         write_manifest(manifest_path, manifest)
         runtime = self.start_runtime(factory=self.plain_factory())
-        result = runtime.plan("plan one")
         with self.assertRaises(ServiceError) as caught:
-            runtime.start_generation(VALID_PLAN, result.package_digest, "req-1")
+            runtime.start_generation("plan one", specs())
         self.assertEqual(caught.exception.code, INVALID_INPUT)
         self.assertEqual(self.job_count(), 0)
 
@@ -478,17 +594,16 @@ class SnapshotTests(RuntimeTestCase):
             store.close()
         self.assertTrue(created)
         second_runtime = self.start_runtime(factory=factory)
+        # A fresh request is planned against the live package this process
+        # pinned, while the queued job keeps the snapshot it was admitted with.
+        fresh = second_runtime.start_generation("plan two", specs("new-request"))
+        self.assertNotEqual(fresh.package_digest, planned.package_digest)
         done = wait_for_job(second_runtime, queued.job_id, {"succeeded"})
         self.assertEqual(done.package_digest, planned.package_digest)
         self.assertEqual(self.fake.calls[0]["package"].root.name, planned.package_digest)
         self.assertEqual(
             self.fake.calls[0]["package"].manifest["built_at"], original_built_at
         )
-        with self.assertRaises(ServiceError) as caught:
-            second_runtime.start_generation(
-                VALID_PLAN, planned.package_digest, "new-request"
-            )
-        self.assertEqual(caught.exception.code, STALE_DIGEST)
 
     def test_an_exact_retry_survives_a_renamed_live_template(self):
         disabled = replace(self.config, generation_enabled=False)
@@ -501,6 +616,8 @@ class SnapshotTests(RuntimeTestCase):
                 plan=VALID_PLAN,
                 package_digest=planned.package_digest,
                 max_waiting_jobs=20,
+                request_text="plan one",
+                specs={"id": "queued-rename", "category": "sd-semireal"},
             )
         finally:
             store.close()
@@ -508,28 +625,24 @@ class SnapshotTests(RuntimeTestCase):
         self.assertTrue(first.stop())
         self._rename_live_template("unholy-sdxl", "replacement")
         second = self.start_runtime(config=disabled, factory=self.plain_factory())
-        retried = second.start_generation(
-            VALID_PLAN, planned.package_digest, "queued-rename"
-        )
+        # The retry is answered from the store before the renamed live manifest
+        # is consulted or a planner is started.
+        retried = second.start_generation("plan one", specs("queued-rename"))
         self.assertEqual(retried.job_id, queued.job_id)
         self.assertEqual(retried.status, "queued")
-        for label, plan in (
-            ("changed prompt", {**VALID_PLAN, "prompt": "a different image"}),
-            ("malformed seed", {**VALID_PLAN, "seed": "42"}),
+        for label, prompt, value in (
+            ("changed prompt", "a different image", specs("queued-rename")),
+            ("changed specs", "plan one", specs("queued-rename", width=1024)),
         ):
             with self.subTest(body=label):
                 with self.assertRaises(ServiceError) as caught:
-                    second.start_generation(
-                        plan, planned.package_digest, "queued-rename"
-                    )
+                    second.start_generation(prompt, value)
                 self.assertEqual(caught.exception.code, REQUEST_CONFLICT)
+        # A category whose template the live manifest no longer declares cannot
+        # be planned at all, and says so instead of blaming the client.
         with self.assertRaises(ServiceError) as caught:
-            second.start_generation(
-                {**VALID_PLAN, "template": "replacement"},
-                planned.package_digest,
-                "fresh-old-digest",
-            )
-        self.assertEqual(caught.exception.code, STALE_DIGEST)
+            second.start_generation("a fresh brief", specs("fresh-request"))
+        self.assertEqual(caught.exception.code, RUNTIME_ERROR)
         self.assertEqual(self.fake.calls, [])
 
     def _rename_live_template(self, old, new):
@@ -571,8 +684,7 @@ class SnapshotTests(RuntimeTestCase):
 
     def test_a_succeeded_job_and_its_artifacts_survive_a_restart(self):
         runtime = self.start_runtime(factory=self.plain_factory())
-        planned = runtime.plan("plan one")
-        view = runtime.start_generation(VALID_PLAN, planned.package_digest, "req-1")
+        view = runtime.start_generation("plan one", specs())
         done = wait_for_job(runtime, view.job_id, {"succeeded"})
         artifact_id = done.artifacts[0].artifact_id
         expected = runtime.read_artifact(done.job_id, artifact_id).data
@@ -637,8 +749,7 @@ class LifecycleTests(RuntimeTestCase):
     def test_graceful_stop_drains_active_work_and_rejects_new_admission(self):
         self.fake.block()
         runtime = self.start_runtime(factory=self.plain_factory())
-        planned = runtime.plan("plan one")
-        view = runtime.start_generation(VALID_PLAN, planned.package_digest, "req-1")
+        view = runtime.start_generation("plan one", specs())
         self.assertTrue(self.fake.entered.wait(10))
         stopped = {}
 
@@ -660,7 +771,7 @@ class LifecycleTests(RuntimeTestCase):
         self.assertEqual(done.status, "succeeded")
         self.assertEqual(len(self.fake.calls), 1)
         with self.assertRaises(ServiceError) as caught:
-            runtime.start_generation(VALID_PLAN, planned.package_digest, "req-2")
+            runtime.start_generation("plan two", specs("req-2"))
         self.assertEqual(caught.exception.code, SHUTTING_DOWN)
         with self.assertRaises(ServiceError):
             runtime.plan("another")
@@ -812,7 +923,6 @@ class LifecycleTests(RuntimeTestCase):
 
     def test_stop_during_a_slow_preflight_rejects_the_admission(self):
         runtime = self.start_runtime(factory=self.plain_factory())
-        planned = runtime.plan("plan one")
         entered = threading.Event()
         release = threading.Event()
 
@@ -826,7 +936,7 @@ class LifecycleTests(RuntimeTestCase):
         def admit():
             try:
                 outcome["view"] = runtime.start_generation(
-                    VALID_PLAN, planned.package_digest, "req-race"
+                    "plan one", specs("req-race")
                 )
             except Exception as exc:
                 outcome["error"] = exc

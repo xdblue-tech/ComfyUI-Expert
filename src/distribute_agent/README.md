@@ -106,8 +106,8 @@ discovery does not descend into it; the service suite follows the same rule.
 
 ## Private MCP endpoint
 
-`serve` runs one loopback Streamable-HTTP FastMCP process; `token` mints the
-HS256 bearer token it requires. Both need the `server` extra and
+`serve` runs one Streamable-HTTP FastMCP process, loopback by default; `token`
+mints the HS256 bearer token it requires. Both need the `server` extra and
 `MEDIAGEN_JWT_SECRET` (at least 32 bytes):
 
 ```bash
@@ -116,10 +116,24 @@ export MEDIAGEN_JWT_SECRET="$(python3 -c 'import secrets; print(secrets.token_ur
 .venv/bin/python -m distribute_agent serve --package distribute
 ```
 
-Generation is disabled by default; `--enable-generation` and `RUNPOD_API_KEY`
-are both required. The endpoint exposes `plan_media`, `start_generation`,
-`get_generation`, a capped `media://jobs/...` artifact resource, an explicitly
-authenticated `GET /artifacts/{job_id}/{artifact_id}`, and public
+`serve` reads `MEDIAGEN_HOST` and `MEDIAGEN_PORT` when `--host`/`--port` are
+absent (defaults `127.0.0.1:8000`); an explicit flag always wins. The host must
+be an IP literal or `localhost`. Binding `0.0.0.0` exposes the endpoint on the
+LAN and needs a TLS proxy in front of it.
+
+Planning defaults to `glm-5.3-flash` through `http://hades.home:8317/v1`, with
+the proxy key read from `MEDIAGEN_PROXY_API_KEY`. `MEDIAGEN_MODEL_ID`,
+`MEDIAGEN_MODEL_BASE_URL` and `MEDIAGEN_MODEL_API_KEY_ENV` (the variable name,
+not a key) override those defaults; `--model-id`, `--model-base-url` and
+`--model-api-key-env` override the exports, and empty or unset values fall back
+to the pinned defaults. Generation is disabled by default:
+`MEDIAGEN_ENABLE_GENERATION` accepts only `true`/`1`/`yes`/`on` or
+`false`/`0`/`no`/`off` (case-insensitive; empty is false), and
+`--enable-generation`/`--disable-generation` override it. An invalid non-empty
+value stops startup with exit 2; paid work still requires
+`RUNPOD_API_KEY`. The endpoint exposes `start_generation` (plan and enqueue in
+one call) and `get_generation`, a capped `media://jobs/...` artifact resource,
+an explicitly authenticated `GET /artifacts/{job_id}/{artifact_id}`, and public
 `GET /health`. Tokens, rotation, host/origin allowlists, error codes, snapshots,
 shutdown limits and the offline tracer are documented in
 [`docs/endpoint.md`](../../docs/endpoint.md).

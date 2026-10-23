@@ -34,6 +34,7 @@ from service_test_support import (
     build_png,
     plan_reply,
     scripted_factory,
+    specs,
     wait_for_job,
 )
 
@@ -65,11 +66,8 @@ class WorkerTestCase(unittest.TestCase):
         fake.release.set()
         runtime.stop(timeout=10)
 
-    def plan_digest(self, runtime):
-        return runtime.plan("plan one").package_digest
-
-    def submit(self, runtime, digest, request_id="req-1", plan=VALID_PLAN):
-        return runtime.start_generation(plan, digest, request_id)
+    def submit(self, runtime, request_id="req-1", **overrides):
+        return runtime.start_generation("plan one", specs(request_id, **overrides))
 
 
 class OutcomeTests(WorkerTestCase):
@@ -85,8 +83,7 @@ class OutcomeTests(WorkerTestCase):
         )
         runtime.start()
         try:
-            digest = runtime.plan("plan one").package_digest
-            view = runtime.start_generation(VALID_PLAN, digest, "req-1")
+            view = runtime.start_generation("plan one", specs())
             done = wait_for_job(runtime, view.job_id, TERMINAL, timeout=20)
             return done.as_dict(), list(fake.calls)
         finally:
@@ -195,8 +192,7 @@ class OutcomeTests(WorkerTestCase):
         )
         runtime.start()
         self.addCleanup(runtime.stop, 10)
-        digest = runtime.plan("plan one").package_digest
-        view = self.submit(runtime, digest, request_id="req-timeout")
+        view = self.submit(runtime, request_id="req-timeout")
         done = wait_for_job(runtime, view.job_id, {"needs_attention"}, timeout=20)
         self.assertEqual(done.error["code"], SUBMISSION_UNCERTAIN)
         self.assertTrue(done.error["may_have_submitted"])
@@ -205,12 +201,11 @@ class OutcomeTests(WorkerTestCase):
 
     def test_disk_exhaustion_during_artifact_read_is_a_storage_failure(self):
         runtime, fake = self.start()
-        digest = self.plan_digest(runtime)
         with mock.patch(
             "distribute_agent.service.runtime._read_artifact_bytes",
             side_effect=OSError(errno.ENOSPC, "No space left on device"),
         ):
-            view = self.submit(runtime, digest)
+            view = self.submit(runtime)
             done = wait_for_job(runtime, view.job_id, TERMINAL, timeout=20)
         self.assertEqual(done.status, "failed")
         self.assertEqual(done.error["code"], STORAGE_ERROR)
@@ -230,8 +225,7 @@ class OutcomeTests(WorkerTestCase):
 
     def test_job_id_is_a_uuid_and_timestamps_are_recorded(self):
         runtime, _ = self.start()
-        digest = self.plan_digest(runtime)
-        view = self.submit(runtime, digest)
+        view = self.submit(runtime)
         done = wait_for_job(runtime, view.job_id, {"succeeded"})
         uuid.UUID(done.job_id)
         self.assertTrue(done.created_at)
@@ -242,12 +236,28 @@ class OutcomeTests(WorkerTestCase):
         self.assertEqual(done.plan, VALID_PLAN)
 
 
+    def test_planning_diagnostics_are_persisted_and_read_back(self):
+        runtime, _ = self.start()
+        view = self.submit(runtime)
+        expected = {
+            "duration_seconds",
+            "model_requests",
+            "agent_steps",
+            "validated_previews",
+            "state",
+        }
+        self.assertEqual(set(view.diagnostics), expected)
+        self.assertGreaterEqual(view.diagnostics["model_requests"], 1)
+        done = wait_for_job(runtime, view.job_id, {"succeeded"})
+        self.assertEqual(runtime.get_generation(done.job_id).diagnostics, done.diagnostics)
+        self.assertEqual(done.as_dict()["diagnostics"], done.diagnostics)
+
+
 class ArtifactAccessTests(WorkerTestCase):
     def setUp(self):
         super().setUp()
         self.runtime, self.fake = self.start(fake=FakeSubmission(behavior="two_images"))
-        digest = self.plan_digest(self.runtime)
-        self.view = self.submit(self.runtime, digest)
+        self.view = self.submit(self.runtime)
         self.view = wait_for_job(self.runtime, self.view.job_id, {"succeeded"})
         self.artifact = next(
             item
@@ -334,6 +344,7 @@ class ArtifactAccessTests(WorkerTestCase):
                 "vendor_job_id",
                 "artifacts",
                 "error",
+                "diagnostics",
                 "created_at",
                 "updated_at",
                 "started_at",

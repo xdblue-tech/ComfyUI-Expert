@@ -54,6 +54,11 @@ def plan_reply(plan):
     return code_reply(f"final_answer({plan!r})")
 
 
+def specs(request_id="req-1", **overrides):
+    """The client specs for one request: an id plus optional overrides."""
+    return {"id": request_id, **overrides}
+
+
 def scripted_factory(replies):
     """A model factory that builds a fresh ScriptedModel for every call."""
     created = []

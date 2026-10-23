@@ -1,10 +1,11 @@
 """Settings for one private media runtime.
 
-Defaults are the tested values from the approved plan: one loopback port, the
-pinned model and proxy, the six-step / seven-request / 180-second planning
+Defaults are the tested values from the approved plan: one bind address and
+port, the pinned model and proxy, the six-step / seven-request / 180-second planning
 budget, the 30-second sandbox action, and the 900-second bridge with a
-780-second poll. Generation is disabled unless the operator passes the explicit
-flag *and* the RunPod key is present in the environment.
+780-second poll. Generation stays disabled unless the operator enables it with
+the CLI flag or MEDIAGEN_ENABLE_GENERATION, and the RunPod key is present in the
+environment.
 
 The dataclass is plain data. CLI flags, environment parsing and secret handling
 belong to the transport/CLI stage, which constructs this object.
@@ -89,10 +90,10 @@ class ServiceConfig:
         object.__setattr__(self, "output_dir", output_dir)
         if not self.host or not isinstance(self.host, str):
             raise ConfigError("host must be a non-empty string")
-        if not _is_loopback(self.host):
+        if not _is_bind_address(self.host):
             raise ConfigError(
-                f"host {self.host!r} is not a loopback address; bind 127.0.0.1 (or "
-                "::1) and reach it through an SSH tunnel"
+                f"host {self.host!r} is not a bind address; use an IP literal such "
+                "as 127.0.0.1, 0.0.0.0 or ::1, or 'localhost'"
             )
         if not isinstance(self.port, int) or isinstance(self.port, bool):
             raise ConfigError("port must be an integer")
@@ -175,13 +176,15 @@ class ServiceConfig:
         return self.state_dir / "workspaces"
 
 
-def _is_loopback(host: str) -> bool:
+def _is_bind_address(host: str) -> bool:
+    """An IP literal or the localhost name; uvicorn can bind either one."""
     if host == "localhost":
         return True
     try:
-        return ip_address(host).is_loopback
+        ip_address(host)
     except ValueError:
         return False
+    return True
 
 
 def _require_positive_int(label: str, value) -> None:
